@@ -2,7 +2,7 @@
 
 AI agent skills for [NeatLogs](https://neatlogs.com) — the observability and tracing platform for LLM and AI agent applications.
 
-These skills give your coding agent (Claude Code, Cursor, Codex, etc.) expert knowledge of the NeatLogs SDK so it can correctly instrument your code, set up tracing, and debug issues.
+These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.) expert knowledge of the NeatLogs SDK so it can correctly instrument your code, set up tracing, and debug issues.
 
 ## Available skills
 
@@ -12,86 +12,97 @@ These skills give your coding agent (Claude Code, Cursor, Codex, etc.) expert kn
 
 ## Installation
 
-### Ask your coding agent
+Pick the method that fits your workflow.
 
-The simplest method — no prerequisites needed.
+### 1. Ask your coding agent (no prerequisites)
 
-> "Install the NeatLogs AI skill from github.com/neatlogs/skills"
+Open Claude Code, Cursor, or any agent that supports skills. Type:
 
-Your agent will clone the repo and link the skill into its skills directory.
+> *"Install the NeatLogs AI skill from github.com/neatlogs/skills"*
 
-### Cursor plugin
+The agent clones the repo and links the skill into its skills directory.
 
-```
-/add-plugin neatlogs
-```
+### 2. CLI (`npx skills add`)
 
-### CLI (`npx skills add`)
-
-Requires Node.js.
+Requires Node.js. Run from your project folder:
 
 ```bash
-# Python skill
 npx skills add neatlogs/skills --skill "neatlogs-py"
 ```
 
-To target a specific agent directly:
+Target a specific agent:
 
 ```bash
 npx skills add neatlogs/skills --skill "neatlogs-py" --agent "claude-code"
+npx skills add neatlogs/skills --skill "neatlogs-py" --agent "cursor"
 ```
 
-### Manual installation
+Install globally (available in every project):
 
 ```bash
-# Clone the repo somewhere stable
-git clone https://github.com/neatlogs/skills /path/to/neatlogs-skills
-
-# Make sure your agent's skills dir exists
-mkdir -p ~/.claude/skills
-
-# Symlink the skill folder
-ln -s /path/to/neatlogs-skills/skills/neatlogs-py ~/.claude/skills/neatlogs-py
+npx skills add neatlogs/skills --skill "neatlogs-py" -g
 ```
 
-Replace `~/.claude/skills` with your agent's skills directory:
-- Claude Code: `~/.claude/skills/`
-- Cursor: `~/.cursor/skills/`
-- Codex: `~/.codex/skills/`
+### 3. Manual git clone + symlink
+
+```bash
+git clone https://github.com/neatlogs/skills ~/neatlogs-skills
+
+# For Claude Code
+mkdir -p ~/.claude/skills
+ln -s ~/neatlogs-skills/skills/neatlogs-py ~/.claude/skills/neatlogs-py
+
+# For Cursor
+mkdir -p ~/.cursor/skills
+ln -s ~/neatlogs-skills/skills/neatlogs-py ~/.cursor/skills/neatlogs-py
+```
+
+## Where the skill is installed
+
+The `npx skills add` command installs into one of these directories (first match wins):
+
+| Agent | Project-level | Global |
+|---|---|---|
+| Claude Code | `.claude/skills/neatlogs-py/` | `~/.claude/skills/neatlogs-py/` |
+| Cursor | `.agents/skills/neatlogs-py/` (or `.cursor/skills/`) | `~/.cursor/skills/neatlogs-py/` |
+| Codex | `.agents/skills/neatlogs-py/` | `~/.codex/skills/neatlogs-py/` |
+| Windsurf | `.windsurf/skills/neatlogs-py/` | `~/.codeium/windsurf/skills/neatlogs-py/` |
+
+`.agents/skills/` is the [open-standard](https://agentskills.io) shared directory — Cursor, Codex, and several others all read from it.
 
 ## Updating
 
-Skills auto-update on next agent restart if installed via `npx skills add` (default symlink mode) or git clone.
+Skills installed via `npx skills add` (default symlink mode) or `git clone` auto-update on next agent restart after you pull the latest:
 
 ```bash
 # CLI users
 npx skills update
 
-# Manual install users
-cd /path/to/neatlogs-skills && git pull
+# Manual clone users
+cd ~/neatlogs-skills && git pull
 ```
 
 ## What the skill does
 
-After installation, your coding agent automatically activates the skill when you ask anything related to NeatLogs:
+Once installed, your coding agent automatically activates the skill when you ask anything related to NeatLogs:
 
 > *"Add neatlogs tracing to my OpenAI calls"*
 > *"Instrument my CrewAI agents with neatlogs"*
 > *"Why aren't my prompt templates showing up in the trace?"*
 
-The agent will read the full skill documentation and follow correct integration patterns from the references files.
+The agent reads the full skill documentation and follows the correct integration patterns from the references files.
 
 ## Requirements
 
-- **For the skill itself**: a coding agent that supports the [Agent Skills](https://agentskills.io) standard (Claude Code, Cursor, Codex, Gemini CLI, etc.)
-- **For `neatlogs-py`**: Python ≥3.10 and `pip install neatlogs`
+- A coding agent that supports the [Agent Skills](https://agentskills.io) standard (Claude Code, Cursor, Codex, Gemini CLI, Windsurf, OpenCode, Goose, etc.)
+- For `neatlogs-py`: Python ≥ 3.10 and `pip install neatlogs`
 
 ## Links
 
 - [NeatLogs platform](https://neatlogs.com)
 - [Python SDK on PyPI](https://pypi.org/project/neatlogs/)
 - [Documentation](https://docs.neatlogs.com)
-- [Open standard](https://agentskills.io)
+- [Agent Skills open standard](https://agentskills.io)
 
 ## License
 
