@@ -1,6 +1,6 @@
-# NeatLogs AI Skills
+# Neatlogs AI Skills
 
-AI agent skills for [NeatLogs](https://neatlogs.com) — the observability and tracing platform for LLM and AI agent applications.
+AI agent skills for [Neatlogs](https://neatlogs.com) — the observability and tracing platform for LLM and AI agent applications.
 
 These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.) expert knowledge of the NeatLogs SDK so it can correctly instrument your code, set up tracing, and debug issues.
 
