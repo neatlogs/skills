@@ -22,7 +22,18 @@ Open Claude Code, Cursor, or any agent that supports skills. Type:
 
 The agent clones the repo and links the skill into its skills directory.
 
-### 2. CLI (`npx skills add`)
+### 2. Claude Code plugin (native install)
+
+Run these two slash commands inside Claude Code:
+
+```
+/plugin marketplace add neatlogs/skills
+/plugin install neatlogs-py@neatlogs
+```
+
+Restart Claude Code when prompted. The plugin appears in `/plugin → Installed`.
+
+### 3. CLI (`npx skills add`) — works for all agents
 
 Requires Node.js. Run from your project folder:
 
@@ -43,7 +54,7 @@ Install globally (available in every project):
 npx skills add neatlogs/skills --skill "neatlogs-py" -g
 ```
 
-### 3. Manual git clone + symlink
+### 4. Manual git clone + symlink
 
 ```bash
 git clone https://github.com/neatlogs/skills ~/neatlogs-skills
@@ -80,6 +91,9 @@ npx skills update
 
 # Manual clone users
 cd ~/neatlogs-skills && git pull
+
+# Claude Code plugin users
+/plugin → Installed → click the refresh icon next to neatlogs-py
 ```
 
 ## What the skill does
