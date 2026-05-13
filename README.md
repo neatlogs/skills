@@ -43,6 +43,23 @@ If you don't have Node.js, just ask your agent in chat:
 
 The agent will clone the repo and link the skill itself.
 
+### Claude Code — native plugin install
+
+Claude Code (CLI, desktop, AND IDE extensions) supports installing this as a plugin. Two ways:
+
+**A. Slash commands (Claude Code CLI / desktop only)**
+
+```
+/plugin marketplace add neatlogs/skills
+/plugin install neatlogs-py@neatlogs
+```
+
+**B. GUI (Claude Code VSCode / JetBrains extension)**
+
+Open the Claude Code panel, click **Manage Plugins** → **Marketplaces** tab → paste `https://github.com/neatlogs/skills` and click **Add**. Then switch to the **Plugins** tab and install `neatlogs-py`.
+
+After either method, restart Claude Code when prompted. The plugin appears under **Plugins → Installed**.
+
 ### Alternative — manual git clone + symlink
 
 ```bash
@@ -56,19 +73,6 @@ ln -s ~/neatlogs-skills/skills/neatlogs-py ~/.claude/skills/neatlogs-py
 mkdir -p ~/.cursor/skills
 ln -s ~/neatlogs-skills/skills/neatlogs-py ~/.cursor/skills/neatlogs-py
 ```
-
-### Claude Code CLI / desktop app — native plugin install
-
-If you're using Claude Code's standalone CLI or desktop app (NOT the VSCode/JetBrains extension), you can install as a Claude Code plugin:
-
-```
-/plugin marketplace add neatlogs/skills
-/plugin install neatlogs-py@neatlogs
-```
-
-Restart when prompted. The plugin appears in `/plugin → Installed`.
-
-> ⚠️ **Note**: `/plugin` is not available in the Claude Code VSCode extension, JetBrains plugin, or web app. If you see *"/plugin isn't available in this environment"*, use the `npx skills add` method above instead — it works in every Claude Code environment.
 
 ## Where the skill is installed
 
@@ -87,7 +91,7 @@ Open your agent and ask any NeatLogs question:
 
 > *"What's the difference between `@span` and `trace()` in neatlogs?"*
 
-If the skill activated, the answer will reference patterns specific to NeatLogs (the universal `@span(kind="...")` decorator, prompt template tracking via `trace()`, etc.). If the answer is generic or vague, the skill didn't load — restart your agent or check the install path above.
+If the skill activated, the answer will reference NeatLogs-specific patterns — the `@span(kind="...")` decorator with kinds like `WORKFLOW`, `AGENT`, `TOOL`, prompt template tracking via `trace()`, and so on. If the answer is generic, the skill didn't load — restart your agent or check the install path above.
 
 ## Updating
 
@@ -100,8 +104,11 @@ npx skills update
 # Manual clone users
 cd ~/neatlogs-skills && git pull
 
-# Claude Code plugin users
+# Claude Code plugin users (CLI/desktop)
 /plugin → Installed → click the refresh icon next to neatlogs-py
+
+# Claude Code plugin users (IDE extension)
+Manage Plugins → Marketplaces → click the refresh icon next to "neatlogs"
 ```
 
 ## What the skill does
