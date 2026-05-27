@@ -29,6 +29,30 @@
       "homepage": "https://neatlogs.com",
       "repository": "https://github.com/neatlogs/skills",
       "license": "MIT"
+    },
+    {
+      "name": "neatlogs-ts",
+      "source": ".",
+      "description": "Instrument TypeScript/Node.js LLM applications with the neatlogs SDK — span wrappers, auto-instrumentation, prompt templates for OpenAI, Anthropic, LangChain, Mastra, Vercel AI SDK, and more.",
+      "version": "1.0.0",
+      "category": "observability",
+      "keywords": [
+        "neatlogs",
+        "llm",
+        "observability",
+        "tracing",
+        "agents",
+        "typescript",
+        "nodejs",
+        "sdk"
+      ],
+      "author": {
+        "name": "NeatLogs",
+        "email": "neatlogs-support@neatlogs.com"
+      },
+      "homepage": "https://neatlogs.com",
+      "repository": "https://github.com/neatlogs/skills",
+      "license": "MIT"
     }
   ]
 }

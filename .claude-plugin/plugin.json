@@ -1,7 +1,7 @@
 {
-  "name": "neatlogs-py",
-  "description": "Instrument Python LLM applications with the neatlogs SDK — tracing, decorators, spans, prompt template tracking, and auto-instrumentation for OpenAI, Anthropic, LangChain, CrewAI, and more.",
-  "version": "1.0.0",
+  "name": "neatlogs",
+  "description": "Instrument LLM applications with the neatlogs SDK — tracing, decorators, spans, prompt template tracking, and auto-instrumentation for OpenAI, Anthropic, LangChain, CrewAI, and more.",
+  "version": "1.1.0",
   "author": {
     "name": "NeatLogs",
     "email": "neatlogs-support@neatlogs.com"
@@ -16,6 +16,7 @@
     "tracing",
     "agents",
     "python",
+    "typescript",
     "sdk"
   ],
   "skills": "./skills"

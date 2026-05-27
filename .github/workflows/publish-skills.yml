@@ -1,0 +1,65 @@
+name: Publish Skills
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package skills
+        run: |
+          cd skills
+          for dir in */; do
+            if [ -f "${dir}SKILL.md" ]; then
+              skill_id="${dir%/}"
+              zip -r "${skill_id}.zip" "$dir"
+              echo "Packaged: ${skill_id}.zip"
+            fi
+          done
+
+      - name: Generate skill-menu.json
+        run: |
+          cd skills
+          cat > skill-menu.json << 'EOF'
+          {
+            "version": "1.0",
+            "categories": {
+              "setup": [
+                {
+                  "id": "neatlogs-py",
+                  "name": "Python SDK",
+                  "downloadUrl": "https://github.com/neatlogs/skills/releases/latest/download/neatlogs-py.zip"
+                },
+                {
+                  "id": "neatlogs-ts",
+                  "name": "TypeScript SDK",
+                  "downloadUrl": "https://github.com/neatlogs/skills/releases/latest/download/neatlogs-ts.zip"
+                }
+              ]
+            }
+          }
+          EOF
+
+      - name: Create/update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: skills-latest
+          name: Skills (Latest)
+          body: Auto-published skill packages for the Neatlogs wizard
+          files: |
+            skills/*.zip
+            skills/skill-menu.json
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

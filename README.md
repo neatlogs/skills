@@ -9,6 +9,7 @@ These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.)
 | Skill | Stack | Description |
 |-------|-------|-------------|
 | [`neatlogs-py`](./skills/neatlogs-py/) | Python | Instrument Python LLM apps with `neatlogs` — decorators, spans, prompt templates, framework integrations |
+| [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — span wrappers, auto-instrumentation, prompt templates |
 
 ## Installation
 
@@ -125,6 +126,7 @@ The agent reads the skill documentation and follows correct integration patterns
 
 - A coding agent that supports the [Agent Skills](https://agentskills.io) standard — Claude Code, Cursor, Codex, Gemini CLI, Windsurf, OpenCode, Goose, etc.
 - For `neatlogs-py`: Python ≥ 3.10 and `pip install neatlogs`
+- For `neatlogs-ts`: Node.js ≥ 18 and `npm install neatlogs`
 
 ## Links
 
