@@ -16,8 +16,11 @@ NeatLogs auto-instruments LLM calls, agent frameworks, and custom code with thes
 
 ## Installation
 
+Always install the latest published version (don't pin an older one):
+
 ```bash
-npm install neatlogs
+npm install neatlogs@latest
+# pnpm add neatlogs@latest · yarn add neatlogs@latest · bun add neatlogs@latest
 ```
 
 Requires Node.js >= 18.

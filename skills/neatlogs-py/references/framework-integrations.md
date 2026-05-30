@@ -85,7 +85,7 @@ This single snippet demonstrates:
 - **Covers**: The `openai` Python SDK — both `OpenAI()` and `AzureOpenAI()` (part of the same `openai` package)
 - **Import order critical**: `neatlogs.init()` BEFORE `from openai import OpenAI`
 - **Supports**: sync, async, streaming
-- **Install**: `pip install neatlogs[openai]`
+- **Install**: `pip install --upgrade neatlogs[openai]`
 
 ```python
 import neatlogs
@@ -135,7 +135,7 @@ if __name__ == "__main__":
 - **Instrumentation key**: `instrumentations=["anthropic"]`
 - **Supports**: Extended thinking, streaming, tool use
 - **Also works with `AnthropicBedrock`**: still use `instrumentations=["anthropic"]`
-- **Install**: `pip install neatlogs[anthropic]`
+- **Install**: `pip install --upgrade neatlogs[anthropic]`
 
 ```python
 import neatlogs
@@ -187,7 +187,7 @@ if __name__ == "__main__":
 - **Instrumentation key**: `instrumentations=["google_genai"]`
 - **Stricter init ordering**: `neatlogs.init()` must precede `google.genai.Client()` **instantiation**, not just import. The client object caches the transport at construction time.
 - **Supports**: sync, streaming, async streaming
-- **Install**: `pip install neatlogs[google-genai]`
+- **Install**: `pip install --upgrade neatlogs[google-genai]`
 
 ```python
 import neatlogs
@@ -239,7 +239,7 @@ See [`troubleshooting.md` §2](troubleshooting.md#2-google-genai-instantiation-o
 - **Instrumentation key**: `instrumentations=["langchain"]`
 - **Auto-instruments**: LLM calls, chains, agents, tools, retrievers
 - **Works with**: AgentExecutor, ReAct agents, LCEL chains
-- **Install**: `pip install neatlogs[langchain]`
+- **Install**: `pip install --upgrade neatlogs[langchain]`
 
 ```python
 import neatlogs
@@ -290,7 +290,7 @@ if __name__ == "__main__":
 
 - **Instrumentation key**: `instrumentations=["langchain"]` (LangGraph uses LangChain instrumentation)
 - **Tracks**: Graph execution, nodes, tool loops, fan-out/fan-in
-- **Install**: `pip install neatlogs[langchain,langgraph]`
+- **Install**: `pip install --upgrade neatlogs[langchain,langgraph]`
 
 ```python
 import neatlogs
@@ -380,7 +380,7 @@ if __name__ == "__main__":
   - Anthropic (`model="claude-..."`) → `"anthropic"`
 - **Use `bind_templates()`** to attach prompt context to agent LLMs
 - **Use `register_crewai_task(task, user_tpl, **vars)`** for task-level prompt tracking
-- **Install**: `pip install neatlogs[crewai]` (pulls in `crewai >= 1.9.3` and `litellm`)
+- **Install**: `pip install --upgrade neatlogs[crewai]` (pulls in `crewai >= 1.9.3` and `litellm`)
 - **Version note**: SDK pins `crewai >= 1.9.3`. CrewAI API has changed significantly between versions — ensure version compatibility.
 
 > **Why the provider key matters here**: CrewAI dispatches LLM calls internally via LiteLLM. For OpenAI-proper the `openai` instrumentor catches the call; for Azure OpenAI (a different SDK path) you need `azure_ai_inference`, otherwise the LLM call succeeds but no `LLM`-kind span is produced — the trace shows only the Agent parent with no LLM child.
@@ -451,7 +451,7 @@ if __name__ == "__main__":
 
 - **Instrumentation key**: `instrumentations=["litellm"]`
 - **Auto-instruments**: LiteLLM's unified `completion()` API across all providers it supports
-- **Install**: `pip install neatlogs[litellm]`
+- **Install**: `pip install --upgrade neatlogs[litellm]`
 
 ```python
 import os

@@ -3,7 +3,11 @@
 ## Action
 
 1. Call the `detect_package_manager` tool to get the install command.
-2. Run the install command for `neatlogs` with the correct extras bracket:
+2. Run the install command for the LATEST `neatlogs` with the correct extras bracket. ALWAYS pull the newest published version (add the upgrade flag so an already-installed older version is upgraded):
+   - pip: `pip install --upgrade neatlogs[<extras>]`
+   - uv: `uv add --upgrade neatlogs[<extras>]`  (or `uv pip install --upgrade ...`)
+   - poetry: `poetry add neatlogs[<extras>]@latest`
+   Choose `<extras>`:
    - If project uses OpenAI: `neatlogs[openai]`
    - If project uses Anthropic: `neatlogs[anthropic]`
    - If project uses Google GenAI: `neatlogs[google-genai]`

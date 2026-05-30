@@ -3,11 +3,11 @@
 ## 1. Install neatlogs
 
 1. Call `detect_package_manager` to get the install command (npm/pnpm/yarn/bun).
-2. Install `neatlogs`:
-   - npm: `npm install neatlogs`
-   - pnpm: `pnpm add neatlogs`
-   - yarn: `yarn add neatlogs`
-   - bun: `bun add neatlogs`
+2. Install the LATEST `neatlogs` — always pull the newest published version, do not pin an older one:
+   - npm: `npm install neatlogs@latest`
+   - pnpm: `pnpm add neatlogs@latest`
+   - yarn: `yarn add neatlogs@latest`
+   - bun: `bun add neatlogs@latest`
 3. Requires Node.js >= 18.
 
 `wrapMastra` is self-contained — it does NOT require `@mastra/observability` or `@neatlogs/instrumentation-mastra`. It wraps Mastra's own methods directly.

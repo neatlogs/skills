@@ -16,24 +16,27 @@ NeatLogs auto-instruments LLM calls, agent frameworks, and custom code. The smal
 
 ## Installation
 
-```bash
-pip install neatlogs
-```
-
-Optional extras install the actual underlying LLM / framework libraries:
+Always install the latest published version — pass `--upgrade` so an already-installed older version is bumped:
 
 ```bash
-pip install neatlogs[openai]
-pip install neatlogs[anthropic]
-pip install neatlogs[google-genai]
-pip install neatlogs[langchain]
-pip install neatlogs[langchain,langgraph]
-pip install neatlogs[crewai]
-pip install neatlogs[litellm]
-pip install neatlogs[mcp]
+pip install --upgrade neatlogs
+# uv: uv add --upgrade neatlogs · poetry: poetry add neatlogs@latest
 ```
 
-Combine multiple extras with commas: `pip install neatlogs[crewai,google-genai]`
+Optional extras install the actual underlying LLM / framework libraries (same `--upgrade` rule applies):
+
+```bash
+pip install --upgrade neatlogs[openai]
+pip install --upgrade neatlogs[anthropic]
+pip install --upgrade neatlogs[google-genai]
+pip install --upgrade neatlogs[langchain]
+pip install --upgrade neatlogs[langchain,langgraph]
+pip install --upgrade neatlogs[crewai]
+pip install --upgrade neatlogs[litellm]
+pip install --upgrade neatlogs[mcp]
+```
+
+Combine multiple extras with commas: `pip install --upgrade neatlogs[crewai,google-genai]`
 
 Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 
