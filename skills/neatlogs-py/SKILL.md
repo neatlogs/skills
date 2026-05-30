@@ -41,7 +41,7 @@ Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 
 ## Core Principles
 
-1. **Import order matters**: `neatlogs.init()` MUST be called **before** importing any LLM libraries for auto-instrumentation patching to work.
+1. **Import order matters**: `neatlogs.init()` MUST be called **before** importing any LLM libraries for auto-instrumentation patching to work. If the project uses `dotenv` / `load_dotenv()`, call it **before** `neatlogs.init()` so `NEATLOGS_API_KEY` from `.env` is available. Correct order: `import neatlogs` → `load_dotenv()` → `neatlogs.init()` → LLM library imports.
 2. **Scripts**: end with `neatlogs.flush()` then `neatlogs.shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` / `shutdown()` per request — see [Long-Running Servers](#long-running-servers) below.
 3. **`@span` for custom code**, **`trace()` for prompt templates** — use `@span(kind="...")` to decorate orchestration functions, use `with neatlogs.trace(kind="LLM", system_prompt_template=..., user_prompt_template=...)` to attach prompt templates to LLM calls.
 4. **Prefer auto-instrumentation** (`instrumentations=["openai"]`) over manual wrapping when a supported library is available.
@@ -151,6 +151,26 @@ For non-FastAPI servers, hook `neatlogs.flush()` + `neatlogs.shutdown()` into th
 
 ---
 
+## Decorator Ordering
+
+`@neatlogs.span()` MUST be placed **below** (closest to `def`) any framework decorators that transform the function into a different object (e.g. `@function_tool`, `@tool`, `@task`). Framework decorators above `@neatlogs.span` is fine only when they preserve the callable (e.g. `@app.get`, `@app.post`).
+
+```python
+# CORRECT — @function_tool wraps the span-decorated function
+@function_tool
+@neatlogs.span(kind="TOOL", tool_name="search")
+def search(query: str) -> str:
+    ...
+
+# WRONG — @neatlogs.span receives a FunctionTool object, crashes
+@neatlogs.span(kind="TOOL", tool_name="search")
+@function_tool
+def search(query: str) -> str:
+    ...
+```
+
+---
+
 ## Instrumentation Workflow
 
 1. **Assess**: Detect what LLM providers / frameworks the project uses.
@@ -158,7 +178,7 @@ For non-FastAPI servers, hook `neatlogs.flush()` + `neatlogs.shutdown()` into th
    - **Auto-instrumentation** for LLM providers → add the key to `instrumentations=[]`
    - **`@span` decorators** for your own orchestration functions
    - **`trace()`** for prompt template tracking on LLM calls, and for direct-API spans (`RERANKER`, `VECTOR_STORE`, `LLM`) when you don't go through an instrumented SDK
-3. **Init**: Add `neatlogs.init()` **BEFORE** any LLM library imports with the correct `instrumentations=[...]` list.
+3. **Init**: Add `neatlogs.init()` **BEFORE** any LLM library imports with the correct `instrumentations=[...]` list. If the project uses `load_dotenv()`, call it before `init()`.
 4. **Verify**: Check the NeatLogs dashboard for incoming traces. Use `debug=True` in `init()` to confirm each instrumentor loaded (prints `✅ Instrumented …` lines).
 
 ---
