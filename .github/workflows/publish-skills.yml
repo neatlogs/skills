@@ -31,25 +31,24 @@ jobs:
       - name: Generate skill-menu.json
         run: |
           cd skills
-          cat > skill-menu.json << 'EOF'
-          {
-            "version": "1.0",
-            "categories": {
-              "setup": [
-                {
-                  "id": "neatlogs-py",
-                  "name": "Python SDK",
-                  "downloadUrl": "https://github.com/neatlogs/skills/releases/latest/download/neatlogs-py.zip"
-                },
-                {
-                  "id": "neatlogs-ts",
-                  "name": "TypeScript SDK",
-                  "downloadUrl": "https://github.com/neatlogs/skills/releases/latest/download/neatlogs-ts.zip"
-                }
-              ]
-            }
-          }
-          EOF
+          base="https://github.com/neatlogs/skills/releases/latest/download"
+          # Emit one menu entry per skill dir that has a SKILL.md, so the menu
+          # always stays in sync with the published .zip artifacts. The "name"
+          # is read from the SKILL.md frontmatter `description` (falls back to id).
+          entries=""
+          for dir in */; do
+            [ -f "${dir}SKILL.md" ] || continue
+            skill_id="${dir%/}"
+            name=$(grep -m1 '^description:' "${dir}SKILL.md" | sed 's/^description:[[:space:]]*//' | tr -d '"' | cut -c1-80)
+            [ -z "$name" ] && name="$skill_id"
+            # JSON-escape the name (quotes/backslashes)
+            name=$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            [ -n "$entries" ] && entries="${entries},"
+            entries="${entries}{\"id\":\"${skill_id}\",\"name\":\"${name}\",\"downloadUrl\":\"${base}/${skill_id}.zip\"}"
+          done
+          printf '{"version":"1.0","categories":{"setup":[%s]}}' "$entries" > skill-menu.json
+          echo "Generated skill-menu.json:"
+          cat skill-menu.json | python3 -m json.tool
 
       - name: Create/update release
         uses: softprops/action-gh-release@v2
