@@ -6,7 +6,7 @@ Scan the project for functions that act as discrete tools/capabilities that the 
 
 ## CRITICAL: Do NOT Decorate Auto-Instrumented Tools
 
-If `"langchain"` is in the instrumentations list, the following are ALREADY auto-traced as TOOL spans:
+With the LangChain handler attached (or any framework wrapper active), the following are ALREADY traced as TOOL spans:
 
 - Any function decorated with `@tool` from `langchain_core.tools`
 - Any function decorated with `@tool` from `langchain.tools`

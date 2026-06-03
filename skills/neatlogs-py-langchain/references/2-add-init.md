@@ -5,7 +5,7 @@
 1. Find the application entry point (`main.py`, `app.py`, `run.py`, or `if __name__ == "__main__":`)
 2. Read the entry point file.
 3. Add `import os` and `import neatlogs` near the top.
-4. Add the init call. Use the `detect_stack` tool to get the `instrumentations` list.
+4. Add the init call. For LangChain, `init()` takes NO `instrumentations=["langchain"]` — tracing is done by the callback handler (Step 4). Only add a provider instrumentor for embeddings (e.g. `instrumentations=["openai"]`) if the project embeds through a provider class — see step 7.5.
 
 ## Pattern
 
@@ -19,11 +19,10 @@ load_dotenv()  # MUST be before init()
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="{project_name}",
-    instrumentations={detected_instrumentations},  # from detect_stack tool
 )
 
-# ALL LLM library imports MUST come AFTER this point
-from openai import OpenAI  # etc.
+# ALL LangChain library imports MUST come AFTER this point
+from langchain_openai import ChatOpenAI  # etc.
 ```
 
 ## WRONG vs RIGHT
@@ -32,15 +31,23 @@ from openai import OpenAI  # etc.
 # ❌ WRONG — missing api_key. SDK may not find it from env depending on load order.
 neatlogs.init(
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
 
 # ✅ RIGHT — explicit api_key from env var guarantees it works.
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
+```
+
+```python
+# ❌ WRONG — instrumentations=["langchain"]. The callback handler is the path now;
+# listing "langchain" here would double-fire chain/LLM spans alongside the handler.
+neatlogs.init(api_key=..., workflow_name="myapp", instrumentations=["langchain", "openai"])
+
+# ✅ RIGHT — no "langchain"; attach the handler in Step 4. (Keep "openai" ONLY if you
+# need provider-level embedding capture — see step 7.5.)
+neatlogs.init(api_key=..., workflow_name="myapp")
 ```
 
 ```python
@@ -64,4 +71,5 @@ Leave `endpoint=` out of `init()`. The SDK defaults to the managed Neatlogs clou
 
 ## Verify BEFORE moving to step 3
 
-Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+1. Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+2. Confirm `init()` has NO `"langchain"` in `instrumentations=` — LangChain is traced by the handler (Step 4). A provider key (`"openai"`/`"cohere"`) is allowed ONLY for embedding capture (step 7.5).

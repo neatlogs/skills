@@ -5,7 +5,7 @@
 1. Find the application entry point (`main.py`, `app.py`, `run.py`, or `if __name__ == "__main__":`)
 2. Read the entry point file.
 3. Add `import os` and `import neatlogs` near the top.
-4. Add the init call. Use the `detect_stack` tool to get the `instrumentations` list.
+4. Add the init call. For CrewAI, `init()` takes NO `instrumentations=` argument — instrumentation happens in Step 4 by wrapping the crew.
 
 ## Pattern
 
@@ -19,11 +19,10 @@ load_dotenv()  # MUST be before init()
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="{project_name}",
-    instrumentations={detected_instrumentations},  # from detect_stack tool
 )
 
-# ALL LLM library imports MUST come AFTER this point
-from openai import OpenAI  # etc.
+# ALL crewai imports MUST come AFTER this point; wrap the crew in Step 4.
+from crewai import Crew, Process  # etc.
 ```
 
 ## WRONG vs RIGHT
@@ -32,15 +31,22 @@ from openai import OpenAI  # etc.
 # ❌ WRONG — missing api_key. SDK may not find it from env depending on load order.
 neatlogs.init(
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
 
 # ✅ RIGHT — explicit api_key from env var guarantees it works.
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
+```
+
+```python
+# ❌ WRONG — pairing "crewai" with a provider instrumentor. Not needed and double-fires
+# LLM spans because wrap(crew) already patches LLM.call.
+neatlogs.init(api_key=..., workflow_name="myapp", instrumentations=["crewai", "openai"])
+
+# ✅ RIGHT — no instrumentations=; wrap the crew in Step 4.
+neatlogs.init(api_key=..., workflow_name="myapp")
 ```
 
 ```python
@@ -64,4 +70,5 @@ Leave `endpoint=` out of `init()`. The SDK defaults to the managed Neatlogs clou
 
 ## Verify BEFORE moving to step 3
 
-Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+1. Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+2. Confirm `init()` has NO `instrumentations=` argument — CrewAI is instrumented by `wrap(crew)` in Step 4.

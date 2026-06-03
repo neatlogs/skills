@@ -1,66 +1,100 @@
 ---
 name: neatlogs-py-langchain
-description: >
-  Instrument a Python project that uses LangChain or LangGraph with the "langchain" auto-instrumentor.
+description: Use when adding neatlogs observability to a Python project that uses LangChain or LangGraph (imports `langchain*` / `langgraph`, builds chains, runnables, or a graph).
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "2.0"
+  version: "3.0"
   language: python
   framework: langchain
 ---
 
 # Neatlogs Python Setup — LangChain / LangGraph
 
-This project uses LangChain or LangGraph. The `"langchain"` auto-instrumentor handles most tracing automatically. Your job is minimal: add ONE `@span(kind="WORKFLOW")` on the user-facing entry point, and add `neatlogs.trace()` + prompt templates inside node functions that call the LLM.
+This project uses LangChain or LangGraph. Neatlogs instruments it with **`neatlogs.langchain_handler()`** — a LangChain callback handler you attach to your model/chain calls. This is the first-class LangChain path (the same callback-system approach LangChain itself exposes).
 
-## What the "langchain" instrumentor auto-traces (DO NOT manually decorate)
+## Core mechanism — `neatlogs.langchain_handler()`
 
-- ALL `@tool`-decorated functions → TOOL span
-- ALL LangGraph node executions → spans
-- ALL `llm.invoke()` / `llm.ainvoke()` calls → LLM span
-- ALL `chain.invoke()` / `chain.ainvoke()` calls → CHAIN span
-- ALL `retriever.get_relevant_documents()` calls → RETRIEVER span
-- ToolNode tool dispatch → TOOL span
+Create ONE handler and pass it via `config={"callbacks": [handler]}` on the calls you want traced. The handler emits the span tree from LangChain's callback events:
 
-## What the underlying provider instrumentor auto-traces
+```
+CHAIN  chain / graph execution
+  ↳ LLM        chat-model / llm call
+  ↳ TOOL       @tool invocation (via ToolNode)
+  ↳ RETRIEVER  retriever call
+```
 
-The `langchain` instrumentor does NOT capture embeddings — LangChain has no embedding callback. Embeddings are captured by the underlying **provider** instrumentor (`openai`, `cohere`, etc.), which the wizard adds automatically when it detects `langchain-openai`/`langchain-cohere`/etc. That instrumentor patches the provider SDK below the LangChain layer, so:
+```python
+import neatlogs
+from langchain_openai import ChatOpenAI
 
-- `OpenAIEmbeddings`, `CohereEmbeddings`, etc. → captured as EMBEDDING spans automatically. DO NOT manually decorate them.
+handler = neatlogs.langchain_handler()
+model = ChatOpenAI(model="gpt-4o")
+result = model.invoke("Hello", config={"callbacks": [handler]})
+```
 
-## What you MUST do manually
+### LangGraph: attach at the MODEL level inside nodes — NOT graph.invoke()
 
-1. Add `@neatlogs.span(kind="WORKFLOW")` on the user-facing function that calls `graph.invoke()` / `graph.ainvoke()`
-2. Add `with neatlogs.trace(kind="LLM", ...)` + `SystemPromptTemplate` / `UserPromptTemplate` inside node functions around LLM calls — this captures prompt template structure for the dashboard
-3. ONLY for CUSTOM embedding functions (a hand-rolled embedder, local model, or raw HTTP call that no provider instrumentor covers): add `@neatlogs.span(kind="EMBEDDING")` + attributes — see `references/6.5-embeddings.md`
+For LangGraph, attach the handler to the **model call inside each node**, not to `graph.invoke()`. Attaching at the graph level duplicates events and produces noisy chain spans. (Same guidance the LangChain callback system gives generally.)
+
+```python
+def analyst_node(state):
+    response = llm.invoke(messages, config={"callbacks": [handler]})   # model level ✅
+    return {"messages": [response]}
+# NOT: graph.invoke(state, config={"callbacks": [handler]})           # graph level ❌ (duplicates)
+```
+
+### Deep Agents (`deepagents`) — prebuilt harness, attach on the top-level invoke
+
+Deep Agents (`from deepagents import create_deep_agent`) is a LangGraph harness — you do NOT write the nodes, so there's no per-node model call to attach to. Pass the handler on the agent's top-level `invoke` / `ainvoke` / `stream`:
+
+```python
+handler = neatlogs.langchain_handler()
+agent = create_deep_agent(model="openai:gpt-4o-mini", tools=[...], system_prompt="...")
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "..."}]},
+    config={"callbacks": [handler]},
+)
+```
+
+For hand-written LangGraph (your own nodes), prefer the model-level attach above. For prebuilt harnesses (Deep Agents), the top-level invoke is the only attach point — use it.
+
+Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own orchestration; the handler's spans nest under your manual spans.
+
+## What the handler captures (DO NOT manually decorate)
+
+- Chat-model / LLM calls → LLM span (model, tokens, latency)
+- `@tool` invocations via ToolNode → TOOL span
+- Retriever calls → RETRIEVER span
+- Chain / node execution → CHAIN span
 
 ## Steps
 
 1. **Install SDK** → `references/1-install-sdk.md`
 2. **Add init()** → `references/2-add-init.md`
 3. **Set environment variables** → `references/3-set-env.md`
-4. **Add WORKFLOW span** → `references/4-add-workflow.md`
-5. **Wrap LLM calls with trace() + templates** → `references/5-wrap-llm-calls.md`
-6. **Verify tool functions are untouched** → `references/6-verify-tools.md`
-6.5. **Embeddings: decorate ONLY custom ones** → `references/6.5-embeddings.md`
-7. **Add flush/shutdown** → `references/7-flush-shutdown.md`
+4. **Create + attach the callback handler** → `references/4-attach-handler.md`
+5. **Add a WORKFLOW span on your entry point** → `references/5-add-workflow.md`
+6. **Attach trace() + prompt templates around LLM calls** → `references/6-wrap-llm-calls.md`
+7. **Verify tool functions are untouched** → `references/7-verify-tools.md`
+7.5. **Embeddings: decorate ONLY custom ones** → `references/7.5-embeddings.md`
+8. **Add flush/shutdown** → `references/8-flush-shutdown.md`
 
 ## Rules (apply to ALL steps)
 
-- `neatlogs.init()` MUST execute BEFORE any LLM library imports.
+- `neatlogs.init()` MUST execute BEFORE any LangChain library imports.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
+- Do NOT pass `instrumentations=["langchain"]` to `init()` — the callback handler is the instrumentation path. (Provider instrumentors for embeddings are a separate concern — see step 7.5.)
+- Create ONE `neatlogs.langchain_handler()` and pass it via `config={"callbacks": [handler]}`. For LangGraph attach at the model level inside nodes, NOT `graph.invoke()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
 - Add imports ONLY for what a file actually uses:
-  - File calls `neatlogs.span(...)` or `neatlogs.trace(...)` → add `import neatlogs`.
-  - File only defines `SystemPromptTemplate`/`UserPromptTemplate` objects → add ONLY `from neatlogs import SystemPromptTemplate, UserPromptTemplate`. Do NOT add a bare `import neatlogs` — it would be an unused import.
+  - File calls `neatlogs.langchain_handler(...)` / `neatlogs.span(...)` / `neatlogs.trace(...)` → add `import neatlogs`.
+  - File only defines `SystemPromptTemplate`/`UserPromptTemplate` objects → add ONLY `from neatlogs import SystemPromptTemplate, UserPromptTemplate`. Do NOT add a bare `import neatlogs`.
 - When present, `import neatlogs` goes at module top level, never inside functions.
-- `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`) — closest to `def`.
-- Minimal edits only. Add decorators + imports. Do not reformat, add comments, or refactor.
-- NEVER add `@neatlogs.span()` to functions that have `@tool` from `langchain_core.tools`.
-- NEVER add `@neatlogs.span()` to LangGraph node functions (the instrumentor traces them).
-- NEVER manually decorate framework embedding classes (`OpenAIEmbeddings` etc.) — the provider instrumentor traces them.
-- The ONLY `@span(kind="WORKFLOW")` you add is on the graph.invoke() caller. `@span(kind="EMBEDDING")` is added ONLY for custom embedders (step 6.5).
+- `@neatlogs.span()` goes BELOW framework decorators, closest to `def`.
+- Minimal edits only. Add the handler + decorators + imports. Do not reformat or refactor.
+- NEVER add `@neatlogs.span()` to `@tool` functions or LangGraph node functions.
+- The ONLY `@span(kind="WORKFLOW")` you add is on the user-facing entry point. `@span(kind="EMBEDDING")` is added ONLY for custom embedders (step 7.5).
 
 ## Reference
 

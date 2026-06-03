@@ -1,6 +1,6 @@
 ---
 name: neatlogs-ts-mastra
-description: Instrument a TypeScript/Node.js project built on the Mastra framework (@mastra/core) with neatlogs.
+description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses the Mastra framework (depends on `@mastra/core`, builds a Mastra agent/workflow).
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs

@@ -5,7 +5,7 @@
 1. Find the application entry point (`main.py`, `app.py`, `run.py`, or `if __name__ == "__main__":`)
 2. Read the entry point file.
 3. Add `import os` and `import neatlogs` near the top.
-4. Add the init call. Use the `detect_stack` tool to get the `instrumentations` list.
+4. Add the init call. For the wrap()/handler/processor paths, `init()` takes NO `instrumentations=` argument — instrumentation happens by wrapping the client/agent (or attaching the handler/processor). Only add `instrumentations=[...]` for a provider `wrap()` doesn't cover (Groq/Cohere/Bedrock/Mistral/Together/LiteLLM) or for embedding capture.
 
 ## Pattern
 
@@ -19,11 +19,11 @@ load_dotenv()  # MUST be before init()
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="{project_name}",
-    instrumentations={detected_instrumentations},  # from detect_stack tool
 )
 
-# ALL LLM library imports MUST come AFTER this point
+# ALL LLM/framework imports MUST come AFTER this point; wrap the client/agent next.
 from openai import OpenAI  # etc.
+client = neatlogs.wrap(OpenAI())
 ```
 
 ## WRONG vs RIGHT
@@ -32,15 +32,23 @@ from openai import OpenAI  # etc.
 # ❌ WRONG — missing api_key. SDK may not find it from env depending on load order.
 neatlogs.init(
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
 
 # ✅ RIGHT — explicit api_key from env var guarantees it works.
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
+```
+
+```python
+# ❌ WRONG — listing a provider in instrumentations= AND wrapping its client. Double-fires.
+neatlogs.init(api_key=..., instrumentations=["openai"])
+client = neatlogs.wrap(OpenAI())
+
+# ✅ RIGHT — wrap() only; no instrumentations= for a wrap()-supported provider.
+neatlogs.init(api_key=...)
+client = neatlogs.wrap(OpenAI())
 ```
 
 ```python
@@ -62,4 +70,5 @@ Do NOT pass `endpoint=` — the SDK defaults to the production cloud endpoint.
 
 ## Verify BEFORE moving to step 3
 
-Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+1. Grep the file for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
+2. Confirm `init()` has NO `instrumentations=` for a provider you intend to `wrap()`. Only uncovered providers / embedding capture belong there.

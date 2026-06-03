@@ -66,10 +66,36 @@ process() [WORKFLOW span — trace root]
 
 ## Decision Tree
 
+**Each FEATURE is its own independent WORKFLOW = one trace root.** A service has many features —
+every route handler, every CLI sub-command, every queue/cron consumer, every public library entry
+point is a SEPARATE, independent workflow. They are SIBLINGS (each its own trace), never nested under
+one another and never collapsed into a single app-wide workflow. The CHAIN/LLM/TOOL/RETRIEVER spans a
+feature uses nest UNDER that feature's WORKFLOW root.
+
 For each function, answer in order:
 
-1. **Is it the user-facing entry point?** (click command, FastAPI route, celery task, `main()`)
-   → YES → `@span(kind="WORKFLOW")`
+1. **Is it a user-facing entry point / a feature?** (FastAPI route, click command, celery/queue/kafka
+   consumer handler, cron job, `main()`, a public library function a caller invokes directly)
+   → YES → `@span(kind="WORKFLOW")` — this is an independent trace root.
+
+   ⚠️ STREAMING / SSE entry points (the handler RETURNS a `StreamingResponse` / `EventSourceResponse` /
+   a generator): do NOT use a `@span` decorator on the handler. It returns immediately, so the span
+   closes BEFORE the generator runs — the streamed children then fire with no active parent and scatter
+   into separate orphan traces. Open the WORKFLOW span INSIDE the generator instead:
+   ```python
+   # ❌ WRONG — decorator closes when the StreamingResponse is returned, orphaning the stream
+   @neatlogs.span(kind="WORKFLOW", name="chat")
+   async def chat(...):
+       return StreamingResponse(event_gen())
+
+   # ✅ RIGHT — span lives inside the generator, stays open across all yields → one trace
+   async def chat(...):
+       async def traced_gen():
+           with neatlogs.trace("chat", kind="WORKFLOW"):
+               async for ev in event_gen():
+                   yield ev
+       return StreamingResponse(traced_gen())
+   ```
 
 2. **Does it contain a direct LLM API call?** (client.chat.completions.create, etc.)
    → YES → `@span(kind="CHAIN")` (see Step 5 for trace() wrapper)

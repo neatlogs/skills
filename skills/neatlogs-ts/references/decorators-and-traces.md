@@ -436,16 +436,16 @@ async function vectorSearch(query: string, topK = 10) {
 
 ### Manual LLM Span (No SDK to Patch)
 
-When calling an LLM API directly without an instrumented SDK:
+When calling an LLM API directly over raw HTTP (`fetch`/`undici`/`axios`) without an instrumented SDK — the wrappers (`wrapOpenAI`, …) are BLIND to these. **Non-streaming** uses the `trace()` callback:
 
 ```typescript
 import { trace } from 'neatlogs';
 
 async function rawLlmCall(prompt: string) {
   return await trace({ name: 'raw_api_llm_call', kind: 'LLM' }, async (span) => {
-    span.setAttribute('neatlogs.internal', false);  // Required for dashboard visibility
-    span.setAttribute('llm.model_name', 'gpt-4o');
-    span.setAttribute('llm.input_messages', JSON.stringify([{ role: 'user', content: prompt }]));
+    span.setAttribute('neatlogs.internal', false);  // Required: no auto-instrumented sibling
+    span.setAttribute('neatlogs.llm.model_name', 'gpt-4o');
+    span.setAttribute('neatlogs.llm.input', JSON.stringify({ messages: [{ role: 'user', content: prompt }] }));
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -454,12 +454,15 @@ async function rawLlmCall(prompt: string) {
     });
     const data = await response.json();
 
-    span.setAttribute('llm.output_messages', JSON.stringify(data.choices));
-    span.setAttribute('llm.token_count.prompt', data.usage.prompt_tokens);
-    span.setAttribute('llm.token_count.completion', data.usage.completion_tokens);
+    span.setAttribute('neatlogs.llm.output', JSON.stringify({ role: 'assistant', content: data.choices?.[0]?.message?.content ?? '' }));
+    span.setAttribute('neatlogs.llm.token_count.prompt', data.usage.prompt_tokens);
+    span.setAttribute('neatlogs.llm.token_count.completion', data.usage.completion_tokens);
+    span.setAttribute('neatlogs.llm.token_count.total', data.usage.total_tokens);
     return data;
   });
 }
 ```
 
 > **Important**: Set `neatlogs.internal` to `false` on manual LLM spans when there's no auto-instrumented sibling. Otherwise the backend drops the span.
+
+> **Streaming raw HTTP** can't use the `trace()` callback (it closes the span when the callback returns, but a stream yields over time). Use the manual `startSpan()`/`end()` lifecycle and the per-provider field paths — see **`references/raw-http-llm.md`**.

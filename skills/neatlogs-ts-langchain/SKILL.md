@@ -1,6 +1,6 @@
 ---
 name: neatlogs-ts-langchain
-description: Instrument a TypeScript/Node.js project built on LangChain / LangGraph with neatlogs.
+description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses LangChain or LangGraph (depends on `@langchain/*` / `@langchain/langgraph`).
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs

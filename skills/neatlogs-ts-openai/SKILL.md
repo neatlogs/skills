@@ -1,6 +1,6 @@
 ---
 name: neatlogs-ts-openai
-description: Instrument a TypeScript/Node.js project that calls LLM SDKs directly (OpenAI, Anthropic, Google GenAI, Bedrock) with neatlogs — no agent framework.
+description: Use when adding neatlogs observability to a TypeScript/Node.js project that calls LLM provider SDKs directly (OpenAI, Anthropic, Google GenAI, Bedrock) and uses no agent framework.
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs

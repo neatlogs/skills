@@ -17,10 +17,13 @@ Refer to `references/llm-call-patterns.md` for the complete list. Key patterns:
 | Groq | `client.chat.completions.create(...)` |
 | Bedrock | `client.converse(...)` |
 | LiteLLM | `litellm.completion(...)` |
+| **Raw HTTP** | `httpx`/`requests`/`aiohttp` POST to a model endpoint URL (`:streamGenerateContent`, `api.openai.com`, `api.anthropic.com`, ...) — **wrap() is BLIND to these; needs a MANUAL span with hand-set I/O + tokens** |
+
+> **Not every model call is an LLM.** Classify by the MODEL'S JOB, not the call mechanism. A Bedrock `client.invoke_model(...)` (or any raw HTTP) is LLM **only** when it generates/chats. If it **embeds** text → vector, it's an **EMBEDDING** span; if it **reranks** query+docs, it's a **RERANKER** span (see `references/span-kinds.md` for the kind-specific attributes). `cohere.rerank` / `*-embed-*` / `titan-embed` model ids over `invoke_model` are RERANKER/EMBEDDING, NOT LLM.
 
 ## Why This Applies Even Inside Auto-Instrumented Code
 
-The auto-instrumentor (e.g., `"langchain"`) captures call metadata (model, tokens, latency) automatically. But it does NOT capture **prompt template structure** — which variables go into which positions. That's what `neatlogs.trace()` + `SystemPromptTemplate`/`UserPromptTemplate` provides. Without templates, prompts don't appear in the Neatlogs prompt management dashboard.
+The wrapper/handler/processor captures call metadata (model, tokens, latency) automatically. But it does NOT capture **prompt template structure** — which variables go into which positions. That's what `neatlogs.trace()` + `SystemPromptTemplate`/`UserPromptTemplate` provides. Without templates, prompts don't appear in the Neatlogs prompt management dashboard.
 
 So even inside a LangChain node function like this:
 

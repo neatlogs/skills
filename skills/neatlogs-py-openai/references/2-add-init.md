@@ -6,13 +6,13 @@
    **For web servers (FastAPI/Flask/Starlette/Litestar) read the CRITICAL section below FIRST — the entry point is NOT the file you think.**
 2. Read the entry point file.
 3. Add `import os` and `import neatlogs` near the top.
-4. Add the init call. Use the `detect_stack` tool to get the `instrumentations` list.
+4. Add the init call. For the wrap() path (OpenAI/Anthropic/Google GenAI), `init()` takes NO `instrumentations=` argument — instrumentation happens in Step 4 by wrapping the client. Only add `instrumentations=[...]` for a Path-B provider (Groq/Cohere/Bedrock/Mistral/Together/LiteLLM) the app uses.
 
 ## CRITICAL: Web servers (FastAPI / Flask / ASGI / WSGI)
 
 For a web app, the server (uvicorn/gunicorn/hypercorn) imports the **app module** (e.g. `src.app:app`) in its own worker process. A `main.py` that calls `uvicorn.run("src.app:app", ...)` does NOT run in that worker — so putting `init()` in `main.py` means **the process that actually serves requests never initializes Neatlogs, and no traces are produced.**
 
-`init()` MUST go in the **module that defines the app object** (the one the server imports), and it MUST run BEFORE that module imports the LLM SDK.
+`init()` MUST go in the **module that defines the app object** (the one the server imports), and it MUST run BEFORE that module imports the LLM SDK / constructs the client.
 
 ```python
 # ❌ WRONG — init() in main.py / the uvicorn launcher.
@@ -22,12 +22,13 @@ neatlogs.init(...)
 uvicorn.run("src.app:app", reload=True)
 
 # app.py  ← what the worker actually loads
-import anthropic          # imported with NO init having run → instrumentor never patches it
+from openai import OpenAI
+client = OpenAI()        # constructed with NO init/wrap having run → never traced
 app = FastAPI(lifespan=lifespan)
 ```
 
 ```python
-# ✅ RIGHT — init() at the top of app.py (the imported app module), BEFORE the LLM import.
+# ✅ RIGHT — init() at the top of app.py (the imported app module), BEFORE the LLM import + wrap.
 # app.py
 import os
 import neatlogs
@@ -37,22 +38,20 @@ load_dotenv()
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="my-api",
-    instrumentations=["anthropic"],   # from detect_stack
 )
 
-import anthropic                      # now patched correctly
+from openai import OpenAI
+client = neatlogs.wrap(OpenAI())        # wrapped in the served process
 from fastapi import FastAPI
 app = FastAPI(lifespan=lifespan)
 ```
 
 Rules for web apps:
-- Put `init()` in the app module (where `app = FastAPI(...)` / `Flask(__name__)` lives), at the very top, after `load_dotenv()`, before the LLM SDK import.
+- Put `init()` in the app module (where `app = FastAPI(...)` / `Flask(__name__)` lives), at the very top, after `load_dotenv()`, before the LLM SDK import and client construction.
 - Do NOT put `init()` only in a `main.py` whose job is to call `uvicorn.run(...)`. If such a `main.py` also matters (e.g. someone runs it directly), it's harmless to leave its own init too, but the app-module init is the one that counts.
-- `neatlogs.flush()`/`shutdown()` go in the lifespan shutdown / `atexit` (Step 7) — but they only work if `init()` ran in the SAME process, which the above guarantees.
+- `neatlogs.flush()`/`shutdown()` go in the lifespan shutdown / `atexit` (Step 8) — but they only work if `init()` ran in the SAME process, which the above guarantees.
 
 ## Pattern (non-web: CLI / script / worker)
-
-## Pattern
 
 ```python
 import os
@@ -64,10 +63,9 @@ load_dotenv()  # MUST be before init()
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="{project_name}",
-    instrumentations={detected_instrumentations},  # from detect_stack tool
 )
 
-# ALL LLM library imports MUST come AFTER this point
+# ALL LLM library imports MUST come AFTER this point; wrap the client in Step 4.
 from openai import OpenAI  # etc.
 ```
 
@@ -77,15 +75,24 @@ from openai import OpenAI  # etc.
 # ❌ WRONG — missing api_key. SDK may not find it from env depending on load order.
 neatlogs.init(
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
 
 # ✅ RIGHT — explicit api_key from env var guarantees it works.
 neatlogs.init(
     api_key=os.getenv("NEATLOGS_API_KEY"),
     workflow_name="myapp",
-    instrumentations=["openai"],
 )
+```
+
+```python
+# ❌ WRONG — listing the provider in instrumentations= AND wrapping the client.
+# Double-fires → duplicate LLM spans.
+neatlogs.init(api_key=..., workflow_name="myapp", instrumentations=["openai"])
+client = neatlogs.wrap(OpenAI())   # pick ONE: wrap() OR instrumentations, not both
+
+# ✅ RIGHT — wrap() only, no instrumentations= for that provider.
+neatlogs.init(api_key=..., workflow_name="myapp")
+client = neatlogs.wrap(OpenAI())
 ```
 
 ```python
@@ -110,4 +117,5 @@ Leave `endpoint=` out of `init()`. The SDK defaults to the managed Neatlogs clou
 ## Verify BEFORE moving to step 3
 
 1. Grep for `api_key=os.getenv("NEATLOGS_API_KEY")`. If this string does not appear inside `neatlogs.init(...)`, you did this step wrong. Fix it now.
-2. **Web apps:** confirm `init()` is in the module that defines the app object (the one the server imports), BEFORE the LLM SDK import — NOT only in a `uvicorn.run(...)` launcher. Grep the app module for `neatlogs.init`; if it's missing there, the served process won't trace.
+2. Confirm `init()` has NO `instrumentations=` for an OpenAI/Anthropic/Google-GenAI client you intend to `wrap()`. Only Path-B providers belong in `instrumentations=[]`.
+3. **Web apps:** confirm `init()` is in the module that defines the app object (the one the server imports), BEFORE the LLM SDK import + `wrap()` — NOT only in a `uvicorn.run(...)` launcher. Grep the app module for `neatlogs.init`; if it's missing there, the served process won't trace.

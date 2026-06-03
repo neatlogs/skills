@@ -1,6 +1,6 @@
 ---
 name: neatlogs-ts-vercel-ai
-description: Instrument a TypeScript/Node.js project built on the Vercel AI SDK (the `ai` package) with neatlogs via wrapAISDK.
+description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses the Vercel AI SDK (depends on the `ai` package, calls `generateText`/`streamText`).
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
