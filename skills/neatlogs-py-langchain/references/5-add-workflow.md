@@ -62,9 +62,9 @@ The callback handler (Step 4) already creates spans for:
 - Every tool call via ToolNode
 - Chain / LCEL execution
 
-You only need ONE `@span(kind="WORKFLOW")` at the top to:
-1. Create the trace root (the handler's spans inherit this trace ID)
-2. Mark the beginning and end of the user-facing operation
+The handler self-roots — a single instrumented call renders on its own, so a manual root isn't required just to make a trace appear. You add ONE `@span(kind="WORKFLOW")` at the top to:
+1. Group the whole multi-node operation under ONE trace (so the graph's nodes, LLM, and tool spans appear together rather than as separate per-call traces)
+2. Mark the beginning and end of the user-facing operation with a meaningful name
 
 ## Do NOT Decorate These
 
