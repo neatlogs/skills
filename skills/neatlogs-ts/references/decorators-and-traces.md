@@ -28,6 +28,8 @@ interface SpanOptions {
   captureOutput?: boolean;  // Serialize return value (default: true)
   mask?: MaskFunction;      // Per-span mask function
   internal?: boolean;       // Mark as internal span
+  endUserId?: string;       // End-user id — ONLY honored on a trace ROOT span (see §7)
+  endUserMetadata?: Record<string, any>;  // End-user fields (JSON) — root span only
 
   // Agent-specific
   role?: string;            // AGENT: agent role
@@ -279,6 +281,8 @@ interface TraceOptions {
   userPromptVariables?: Record<string, any>;  // User prompt variables
   version?: string;              // Prompt version identifier
   mask?: MaskFunction;           // Per-trace mask function
+  endUserId?: string;            // End-user id — ONLY honored on a trace ROOT (see §7)
+  endUserMetadata?: Record<string, any>;  // End-user fields (JSON) — root only
   attributes?: Record<string, any>;  // Custom span attributes
 }
 ```
@@ -466,3 +470,55 @@ async function rawLlmCall(prompt: string) {
 > **Important**: Set `neatlogs.internal` to `false` on manual LLM spans when there's no auto-instrumented sibling. Otherwise the backend drops the span.
 
 > **Streaming raw HTTP** can't use the `trace()` callback (it closes the span when the callback returns, but a stream yields over time). Use the manual `startSpan()`/`end()` lifecycle and the per-provider field paths — see **`references/raw-http-llm.md`**.
+
+---
+
+## 7. End-User Identity (`endUserId` / `endUserMetadata`)
+
+Attaches the **end-user** — the user of YOUR application (the person using your AI product) — to a trace, so you can filter the traces page by end-user and power per-user analytics.
+
+> Distinct from `init({ userId })`, which identifies the *operator* running the SDK (a developer, a service account). Setting one does not set the other.
+
+### The model: one end-user per trace; end-user is session-level
+
+- A trace belongs to exactly **one** end-user — declared once, no per-span override, no `identify()` call.
+- It is effectively **session-level**: a multi-turn chat (`init({ autoSession: true })` or an explicit `sessionId`) is one session with many traces, all the same person. A plain workflow is one trace = one session. The backend rolls the value up from the trace to its session.
+
+### Where to set it — only on the trace ROOT (or init)
+
+The SDK only honors `endUserId` on the **root span** of a trace (any kind). On a non-root child span it is **silently ignored**.
+
+| Case | How | Notes |
+|------|-----|-------|
+| 1. Root is a `span()` wrapper | `span({ kind: 'WORKFLOW', endUserId }, fn)` | The wrapped fn must be the trace root (no active parent). |
+| 2. Root is a `trace()` block | `trace({ name: 'chat', endUserId }, async () => {...})` | The top-level `trace()` at a request/turn boundary. |
+| 3. Auto-root via `wrapOpenAI`/etc. only | `init({ endUserId })` | Process-global default landing on the auto-created root. Single-user processes only. |
+| 4. Non-root child span | — | **Ignored.** Move it to the root. |
+
+### Multi-tenant server (the common case)
+
+Read the id from the per-request context and set it on the root you open at the handler — never hardcode it:
+
+```typescript
+app.post('/chat', async (req, res) => {
+  // req.user.id differs per request — resolve it HERE.
+  const out = await trace(
+    { name: 'chat', endUserId: String(req.user.id), endUserMetadata: { plan: req.user.plan } },
+    async () => runAgent(req.body.message),   // children inherit nothing extra — the root carries the id
+  );
+  res.json(out);
+});
+```
+
+For a multi-turn chat, also set `sessionId` (or `autoSession: true`) so the per-turn traces group under one session; set `endUserId` on each turn's root (same value every turn).
+
+### Browser SDK
+
+In `neatlogs/browser`, set the end-user once on the client (`new Neatlogs({ apiKey, endUser, endUserMetadata })`) or per call (`trackAI({ ..., endUser })` / `trace({ ..., endUser })`). It is attached to the trace root only.
+
+### Single-user process (CLI / worker)
+
+```typescript
+await init({ apiKey: ..., workflowName: 'batch', endUserId: 'u_812' });
+// Every trace in this process is attributed to u_812 (lands on the root via a resource attribute).
+```

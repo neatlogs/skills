@@ -16,6 +16,8 @@ The primary manual instrumentation API for custom code. Wraps a function to crea
     name=None,               # Optional: span name (defaults to function name)
     description=None,        # Optional: span description (used as tool.description for TOOL/MCP_TOOL)
     mask=None,               # Optional: per-span mask function
+    end_user_id=None,        # Optional: end-user id — ONLY honored on a trace ROOT span (see §7)
+    end_user_metadata=None,  # Optional: dict of end-user fields (JSON) — root span only
     # Kind-specific:
     role=None,               # AGENT: agent role (also sets agent.name)
     goal=None,               # AGENT: agent goal
@@ -248,6 +250,8 @@ with neatlogs.trace(
     system_prompt_template=None,      # Optional: SystemPromptTemplate instance
     user_prompt_template=None,        # Optional: UserPromptTemplate instance
     mask=None,                        # Optional: per-span mask function
+    end_user_id=None,                 # Optional: end-user id — ONLY honored on a trace ROOT (see §7)
+    end_user_metadata=None,           # Optional: dict of end-user fields (JSON) — root only
 ) as span:
     ...
 ```
@@ -442,7 +446,53 @@ The nesting is automatic — OpenTelemetry's context propagation ensures any spa
 
 ---
 
-## 7. Async Support
+## 7. End-User Identity (`end_user_id` / `end_user_metadata`)
+
+Attaches the **end-user** — the user of YOUR application (the person interacting with your AI product) — to a trace, so you can filter the traces page by end-user and power per-user analytics.
+
+> This is **distinct from** `init(user_id=...)`, which identifies the *operator* running the SDK (a developer, a service account). Setting `user_id` does NOT set the end-user, and vice-versa.
+
+### The model: one end-user per trace; end-user is session-level
+
+- A trace belongs to exactly **one** end-user. There is no per-span override and no `identify()` call — you declare it once.
+- End-user is effectively **session-level**: a multi-turn chat (`init(auto_session=True)` or an explicit `session_id`) is one session with many traces, all belonging to the **same** person. A plain workflow is one trace = one session. The backend rolls the value up from the trace to its session.
+
+### Where to set it — only on the trace ROOT (or init)
+
+The SDK only honors `end_user_id` on the **root span** of a trace (any kind — WORKFLOW, CHAIN, AGENT…). On a non-root child span it is **silently ignored**. The four valid placements:
+
+| Case | How | Notes |
+|------|-----|-------|
+| 1. Root is a decorated function | `@neatlogs.span(kind="WORKFLOW", end_user_id=...)` | The decorated fn must be the trace root (no active parent span). |
+| 2. Root is a `trace()` block | `with neatlogs.trace("chat", end_user_id=...):` | The top-level `trace()` at a request/turn boundary. |
+| 3. Auto-root via `wrap()` only (no manual root) | `init(end_user_id=...)` | A process-global default landing on the auto-created root. Use for single-user processes (CLI, per-user worker). |
+| 4. Non-root child span | — | **Ignored.** Move it to the root. |
+
+### Multi-tenant server (the common case)
+
+On a shared server each request is a different end-user, so you cannot use `init()` — read the id from the per-request context and set it on the root you open at the request handler:
+
+```python
+@app.post("/chat")
+def chat(req):
+    # req.user.id differs per request — resolve it HERE, never hardcode.
+    with neatlogs.trace("chat", end_user_id=str(req.user.id),
+                        end_user_metadata={"plan": req.user.plan}) as span:
+        return run_agent(req.message)   # child spans inherit nothing extra — root carries the id
+```
+
+For a multi-turn chat, also set `session_id` (or `auto_session=True`) so the per-turn traces group under one session; set `end_user_id` on each turn's root (same value every turn).
+
+### Single-user process (CLI / per-user worker)
+
+```python
+neatlogs.init(api_key=..., workflow_name="batch", end_user_id="u_812")
+# Every trace in this process is attributed to u_812 (lands on the root via a resource attribute).
+```
+
+---
+
+## 8. Async Support
 
 - `@span()` works with both sync and async functions automatically. It detects `async def` and wraps them correctly.
 - `trace()` is a sync `@contextmanager` but works in async code — the context manager itself is sync, the code inside can be async.

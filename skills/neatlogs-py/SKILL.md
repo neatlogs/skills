@@ -267,6 +267,7 @@ Picking the wrong key makes the LLM call silently untraced — the trace UI show
 For deep dives, see the companion reference files:
 
 - **Custom instrumentation** with decorators and traces → [`references/decorators-and-traces.md`](references/decorators-and-traces.md)
+- **End-user identity** (`end_user_id` — filter/analyze traces by your app's users; root-span/session model) → [`references/decorators-and-traces.md` §7](references/decorators-and-traces.md)
 - **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
 - **Troubleshooting** and common mistakes → [`references/troubleshooting.md`](references/troubleshooting.md)
