@@ -278,7 +278,6 @@ For deep dives, see the companion reference files:
 | Variable | Description |
 |---|---|
 | `NEATLOGS_API_KEY` | API key (alternative to `api_key` param) |
-| `NEATLOGS_ENDPOINT` | Backend base URL (alternative to `endpoint` param) |
 
 ---
 

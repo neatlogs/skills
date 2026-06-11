@@ -4,7 +4,6 @@
 
 1. Use the `set_env_values` tool to write to `.env`:
    - `NEATLOGS_API_KEY` — from the wizard session context
-   - `NEATLOGS_ENDPOINT` — from the wizard session context
 2. **Preserve EVERY key the project already declares.** Read `.env.example` (and `.env.sample`/`.env.template`) and copy ALL of its keys into `.env` with their placeholder values — provider keys (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`), config, service URLs, everything. Dropping any can break the app. The resulting `.env` must be a SUPERSET of `.env.example` plus the `NEATLOGS_*` keys.
 3. For each detected LLM provider, ensure its standard key exists as a placeholder if missing:
    | Provider | Env var |
@@ -18,7 +17,7 @@
 
 ## Do NOT pass endpoint= in code
 
-Leave `endpoint` out of `init()` in committed code (the SDK defaults to the managed cloud). Self-hosted/local endpoints are a deployment concern set via `NEATLOGS_ENDPOINT` for local testing.
+Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
 
 ## Verify BEFORE moving on
 1. `NEATLOGS_API_KEY` is in `.env`.

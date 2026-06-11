@@ -30,7 +30,7 @@ const { ChatOpenAI } = await import("@langchain/openai");
 ```
 
 ## Do NOT pass endpoint= in code
-Leave `endpoint` out of `init()`; set `NEATLOGS_ENDPOINT` via env for local testing.
+Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
 
 ## Verify
 1. `await init(...)` runs before any `@langchain/*` import.

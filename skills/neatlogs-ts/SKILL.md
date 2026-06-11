@@ -48,7 +48,6 @@ import { init, span, flush, shutdown } from 'neatlogs';
 
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? '',
-  endpoint: process.env.NEATLOGS_ENDPOINT ?? 'https://staging-cloud.neatlogs.com',
   workflowName: 'my-app',
   instrumentations: ['openai'],
 });

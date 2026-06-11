@@ -33,7 +33,7 @@ const { OpenAI } = await import("openai");
 If the project isn't ESM/top-level-await friendly, do init inside an async bootstrap that runs before anything else, then dynamically import the modules that use the SDK.
 
 ## Do NOT pass endpoint= in code
-Leave `endpoint` out of `init()` (SDK defaults to managed cloud). Local/self-hosted endpoints are set via `NEATLOGS_ENDPOINT` env for local testing only.
+Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
 
 ## Verify
 1. `await init(...)` is the first thing after dotenv.

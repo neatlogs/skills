@@ -4,7 +4,6 @@
 
 1. Use the `set_env_values` tool to write these to `.env`:
    - `NEATLOGS_API_KEY` — use the API key value provided in the wizard session context
-   - `NEATLOGS_ENDPOINT` — use the endpoint value provided in the wizard session context
 2. **Preserve EVERY key the project already declares — not just provider keys.** Writing to `.env` must NOT drop any of the app's config. Before/while writing:
    - Read `.env.example` (and `.env.sample`/`.env.template` if present). Copy **ALL** of its keys into `.env` — provider keys (`OPENAI_API_KEY`), app secrets (`API_SECRET_KEY`), server config (`HOST`, `PORT`, `ENV`), service URLs (`REDIS_URL`, `DATABASE_URL`), feature flags, everything — each with its placeholder/default value. Dropping any of these can break the app (e.g. an auth middleware that reads `API_SECRET_KEY` rejects all requests if it's missing).
    - For each detected LLM provider (from `detect_stack`), ensure its standard key exists in `.env` as a placeholder if missing. See the mapping below.
@@ -42,7 +41,6 @@ ENV=development
 # The auth middleware reads API_SECRET_KEY → every request now 500s. App is broken.
 ANTHROPIC_API_KEY=sk-ant-your-key-here
 NEATLOGS_API_KEY=nl-...
-NEATLOGS_ENDPOINT=...
 
 # ✅ RIGHT — ALL .env.example keys carried over, plus NEATLOGS_*.
 ANTHROPIC_API_KEY=sk-ant-your-key-here
@@ -51,7 +49,6 @@ HOST=0.0.0.0
 PORT=8000
 ENV=development
 NEATLOGS_API_KEY=nl-...
-NEATLOGS_ENDPOINT=...
 ```
 
 ## Pydantic-Settings Fix (CRITICAL)
@@ -90,7 +87,7 @@ class Settings(BaseSettings):
 
 ## Why this matters
 
-When you add `NEATLOGS_API_KEY` and `NEATLOGS_ENDPOINT` to `.env`, pydantic-settings will try to load ALL env vars from that file. If the Settings class doesn't have fields for them AND doesn't allow extras, the app crashes on import. This is a guaranteed runtime error.
+When you add `NEATLOGS_API_KEY` to `.env`, pydantic-settings will try to load ALL env vars from that file. If the Settings class doesn't have fields for them AND doesn't allow extras, the app crashes on import. This is a guaranteed runtime error.
 
 ## Verify BEFORE moving to step 4
 
