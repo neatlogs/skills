@@ -151,6 +151,7 @@ These are in the registry but have `null` instrumentation fields — they cannot
 For deep dives, see the companion reference files:
 
 - **Custom instrumentation** with `span()`, `Span()`, and `trace()` → [`references/decorators-and-traces.md`](references/decorators-and-traces.md)
+- **End-user identity** (`endUserId` — filter/analyze traces by your app's users; root-span/session model) → [`references/decorators-and-traces.md` §7](references/decorators-and-traces.md)
 - **Raw HTTP LLM calls** (fetch/undici/axios — wrappers are BLIND, need manual spans; streaming lifecycle + per-provider field paths) → [`references/raw-http-llm.md`](references/raw-http-llm.md)
 - **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
