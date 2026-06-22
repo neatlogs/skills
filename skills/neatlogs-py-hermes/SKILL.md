@@ -21,12 +21,12 @@ own Python code. Neatlogs instruments it with the **`hermes` instrumentation**
 > neatlogs` (it traces the CLI/gateway with zero code). This skill is only for
 > code that imports `run_agent`/`AIAgent`.
 
-## Core mechanism — `neatlogs.init(instrumentations=["hermes", "openai"])`
+## Core mechanism — `neatlogs.init(instrumentations=["hermes"])`
 
 The `hermes` instrumentor patches `AIAgent.run_conversation` (an **AGENT** span)
 and `ToolRegistry.dispatch` (a **TOOL** span per tool call). Hermes' LLM calls go
-through the `openai` SDK (pointed at OpenRouter), so `openai` captures the **LLM**
-spans. Span tree:
+through the `openai` SDK (pointed at OpenRouter) — and `"hermes"` **auto-loads
+`openai`** for the **LLM** spans, so you only list `"hermes"`. Span tree:
 
 ```
 AGENT  hermes.run_conversation   (one agentic run)
@@ -48,9 +48,10 @@ the same class-level patch, so prefer the `instrumentations=[...]` form.
 
 ## Rules (apply to ALL steps)
 
-- `neatlogs.init(instrumentations=["hermes", "openai"])` MUST run BEFORE
+- `neatlogs.init(instrumentations=["hermes"])` MUST run BEFORE
   `from run_agent import AIAgent` — the instrumentor patches the class at import
   time, so a later init misses it. `load_dotenv()` runs before `init()`.
+  (`"hermes"` auto-loads `openai` for the LLM spans — no need to add it yourself.)
 - Hermes isn't on PyPI — it's git-installed (see step 1).
 - Hermes routes LLM calls through OpenRouter by default; if you use a non-OpenAI
   provider adapter (anthropic / bedrock / gemini), add that provider to the

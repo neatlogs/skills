@@ -1,6 +1,6 @@
 # Step 4: Run the agent (no per-call changes needed)
 
-Because `init(instrumentations=["hermes", "openai"])` patched the `AIAgent` class,
+Because `init(instrumentations=["hermes"])` patched the `AIAgent` class,
 you do NOT change how the agent is called — just construct and run it as usual.
 
 ```python

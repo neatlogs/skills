@@ -1,6 +1,6 @@
 # Span kinds (Hermes — library mode)
 
-`init(instrumentations=["hermes", "openai"])` emits:
+`init(instrumentations=["hermes"])` (which auto-loads `openai`) emits:
 - **AGENT** — `hermes.run_conversation` (one agentic run; the trace root)
 - **LLM** — `chat.completions.create` (via the `openai` instrumentor → OpenRouter)
 - **TOOL** — `hermes.tool.<name>` (each `ToolRegistry.dispatch`)
