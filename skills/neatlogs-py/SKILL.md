@@ -193,7 +193,7 @@ def search(query: str) -> str:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `api_key` | `str` | `None` | API key (or set `NEATLOGS_API_KEY` env var). If neither is set, spans are created locally but **silently not exported** — no error is raised |
-| `endpoint` | `str` | `"https://staging-cloud.neatlogs.com"` | Backend base URL. Trace export is normalized to `{base_url}/v1/traces` |
+| `endpoint` | `str` | `"https://ingest.neatlogs.com"` | Backend base URL. Trace export is normalized to `{base_url}/v1/traces` |
 | `workflow_name` | `str` | `None` | Name for this workflow / application |
 | `instrumentations` | `list[str]` | `None` | Libraries to auto-instrument (e.g. `["openai", "langchain"]`) |
 | `tags` | `list[str]` | `None` | Tags for filtering in dashboard |
