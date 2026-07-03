@@ -61,4 +61,5 @@ the same class-level patch, so prefer the `instrumentations=[...]` form.
 
 ## Reference
 - Combining the instrumentation with @span/trace/log → `references/5-spans-trace-log.md`
+- Sessions & end-users (group a conversation's runs, attribute to a customer) → `references/sessions-and-end-users.md`
 - Span kinds reference → `references/span-kinds.md`

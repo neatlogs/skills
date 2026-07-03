@@ -11,7 +11,12 @@ metadata:
 
 # Neatlogs Python Setup — LangChain / LangGraph
 
-This project uses LangChain or LangGraph. Neatlogs instruments it with **`neatlogs.langchain_handler()`** — a LangChain callback handler you attach to your model/chain calls. This is the first-class LangChain path (the same callback-system approach LangChain itself exposes).
+This project uses LangChain or LangGraph. Neatlogs offers **two ways** to instrument it:
+
+1. **`neatlogs.langchain_handler()`** — a LangChain callback handler you attach per call via `config={"callbacks": [handler]}`. This is the **recommended, first-class** path (LangChain's own callback system; explicit control over exactly which calls are traced). This skill uses it throughout.
+2. **`instrumentations=["langchain"]`** on `init()` — zero-touch auto-instrumentation (OpenInference) that traces LangChain/LangGraph globally without editing call sites. Use this when you can't (or don't want to) thread a handler through your code.
+
+Pick ONE — don't combine them (that double-traces). The rest of this skill shows the handler approach.
 
 ## Core mechanism — `neatlogs.langchain_handler()`
 
@@ -84,7 +89,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 
 - `neatlogs.init()` MUST execute BEFORE any LangChain library imports.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
-- Do NOT pass `instrumentations=["langchain"]` to `init()` — the callback handler is the instrumentation path. (Provider instrumentors for embeddings are a separate concern — see step 7.5.)
+- This skill uses the **callback handler**; if you go that route, do NOT ALSO pass `instrumentations=["langchain"]` to `init()` — running both double-traces. (`instrumentations=["langchain"]` is a valid standalone alternative — see the intro — just don't combine the two. Provider instrumentors for embeddings are a separate concern — see step 7.5.)
 - Create ONE `neatlogs.langchain_handler()` and pass it via `config={"callbacks": [handler]}`. For LangGraph attach at the model level inside nodes, NOT `graph.invoke()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
 - Add imports ONLY for what a file actually uses:
@@ -99,3 +104,4 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 ## Reference
 
 - Span kinds → `references/span-kinds.md`
+- Sessions & end-users (per-turn `identify()` for customer analytics) → `references/sessions-and-end-users.md`

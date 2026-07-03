@@ -66,3 +66,4 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 ## Reference
 
 - Span kinds → `references/span-kinds.md`
+- Sessions & end-users → `references/sessions-and-end-users.md`

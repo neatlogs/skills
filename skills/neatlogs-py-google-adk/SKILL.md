@@ -43,3 +43,4 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 ## Reference
 - Combining wrap() with @span/trace/log → `references/5-spans-trace-log.md`
 - Span kinds reference → `references/span-kinds.md`
+- Sessions & end-users (group turns, per-user analytics via `identify()`) → `references/sessions-and-end-users.md`

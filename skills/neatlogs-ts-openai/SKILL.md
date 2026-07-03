@@ -28,6 +28,8 @@ This project calls an LLM provider SDK directly (no agent framework). Neatlogs a
 | Google GenAI | `google_genai` | `await import('@google/genai')` |
 | AWS Bedrock | `bedrock` | bedrock client SDK |
 
+> **Explicit wrappers (alternative to the instrumentation key).** For `@google/genai` you can instead wrap the client directly, mirroring Python's `neatlogs.wrap()`: `import { wrapGoogleGenAI } from 'neatlogs/google-genai'` (Gemini / AI Studio, `provider=google`) or `import { wrapVertexAI } from 'neatlogs/vertex-ai'` (Vertex mode, `provider=vertex_ai`). Wrap once — `const gc = wrapGoogleGenAI(new GoogleGenAI({ apiKey }))` — then call `gc.models.generateContent(...)` as usual. Use the wrapper OR the `google_genai` instrumentation key, not both.
+
 ## Steps
 
 1. **Install** → `references/1-install.md`
@@ -49,5 +51,6 @@ This project calls an LLM provider SDK directly (no agent framework). Neatlogs a
 
 - **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the project is a Next.js app, else the server 500s with `Can't resolve 'crypto'` and emits no traces.
 - Custom span()/trace() deep dive → `references/decorators-and-traces.md`
+- Sessions & end-users (per-turn `identify()`) → `references/sessions-and-end-users.md`
 - Prompt templates → `references/prompt-templates.md`
 - Troubleshooting → `references/troubleshooting.md`

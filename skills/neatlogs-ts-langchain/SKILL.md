@@ -11,7 +11,12 @@ metadata:
 
 # Neatlogs TypeScript Setup — LangChain / LangGraph
 
-This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). The `langchain` instrumentation auto-traces LLM calls, chains, agents, tools, and retrievers. Your job is minimal: init before the LangChain import, and add ONE `span({ kind:'WORKFLOW' })` on the user-facing entry.
+This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). Neatlogs offers **two ways** to instrument it:
+
+1. **`instrumentations: ['langchain']`** on `init()` — zero-touch auto-tracing of LLM calls, chains, agents, tools, and retrievers. **Recommended** and used throughout this skill: init before the LangChain import, add ONE `span({ kind:'WORKFLOW' })` on the user-facing entry, done.
+2. **`langchainHandler()`** (from `neatlogs/langchain`) — a callback handler you attach per call via `{ callbacks: [langchainHandler()] }`. Use it when you want explicit, per-call control instead of global auto-instrumentation.
+
+Pick ONE — don't combine them (that double-traces). The rest of this skill shows the `instrumentations` approach.
 
 ## Core mechanism
 
@@ -46,5 +51,6 @@ This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph
 
 - **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the project is a Next.js app, else the server 500s with `Can't resolve 'crypto'` and emits no traces.
 - Custom span()/trace() (rare here) → `references/decorators-and-traces.md`
+- Sessions & end-users (per-turn `identify()` wrapper-only) → `references/sessions-and-end-users.md`
 - Prompt templates → `references/prompt-templates.md`
 - Troubleshooting → `references/troubleshooting.md`

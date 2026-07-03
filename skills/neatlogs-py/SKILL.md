@@ -10,7 +10,7 @@ description: >
 # NeatLogs — Agent Skill
 
 NeatLogs auto-instruments LLM calls, agent frameworks, and custom code. The small public API most integrations need:
-`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `SystemPromptTemplate`, `UserPromptTemplate`, `bind_templates()`, `register_crewai_task()`.
+`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `identify()`, `SystemPromptTemplate`, `UserPromptTemplate`, `bind_templates()`, `register_crewai_task()`.
 
 ---
 
@@ -197,13 +197,38 @@ def search(query: str) -> str:
 | `workflow_name` | `str` | `None` | Name for this workflow / application |
 | `instrumentations` | `list[str]` | `None` | Libraries to auto-instrument (e.g. `["openai", "langchain"]`) |
 | `tags` | `list[str]` | `None` | Tags for filtering in dashboard |
-| `auto_session` | `bool` | `False` | Auto-generate a session ID on first use and reuse it for the process lifetime. Useful for chatbots / multi-turn conversations |
-| `session_id` | `str` | `None` | Explicit session ID — overrides `auto_session`. Pass a per-user or per-conversation ID to group turns in the dashboard |
+| `user_id` | `str` | `None` | The **operator** running the SDK (developer / service account) — NOT your app's end-user. For end-user/session identity see [Sessions & End-Users](#sessions--end-users) |
 | `debug` | `bool` | `False` | Enable verbose logging to stderr |
 | `pii_enabled` | `Optional[bool]` | `None` | Override the team-level server-side PII redaction setting. `True` = enable, `False` = disable, `None` (default) = use the team setting in the NeatLogs dashboard |
 | `pii_span_types` | `Optional[list[str]]` | `None` | Override which span types have PII redaction applied. `None` = use team dashboard config |
 | `capture_logs` | `bool` | `False` | Capture `neatlogs.log()`, stdlib `logging.*()`, and `print()` (via `capture_stdout=True` on `@span`) as LOG spans |
 | `mask` | `callable` | `None` | Client-side mask function `(span_dict) -> span_dict` — see [Data Masking](#data-masking-and-pii) |
+
+---
+
+## Sessions & End-Users
+
+Attaching session + end-user identity lets you analyze usage / cost / errors per customer and segment, view multi-turn conversation timelines, and replay a customer's conversation.
+
+Model: **one turn = one trace**; a **session** groups the turns of one conversation (same `session_id` on every turn); the **end-user** is per session (same `end_user_id` on every turn). Identity is stamped on the **trace root only** — child spans ignore these params; the backend rolls it up. There is NO session or end-user param on `init()`.
+
+Set identity in one of three ways:
+
+```python
+# 1. On a trace root
+with neatlogs.trace("turn", session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"}):
+    ...
+
+# 2. On a @span root (WORKFLOW / AGENT / CHAIN)
+@neatlogs.span(kind="WORKFLOW", session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"})
+def handle_turn(...):
+    ...
+
+# 3. Wrapper-only code (you only call neatlogs.wrap(...) and have no root of your own).
+# The wrapper's auto-root inherits the identify() context (works for framework wrappers too, neatlogs>=1.4.2):
+with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"}):
+    client.chat.completions.create(...)
+```
 
 ---
 

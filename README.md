@@ -10,6 +10,7 @@ These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.)
 |-------|-------|-------------|
 | [`neatlogs-py`](./skills/neatlogs-py/) | Python | Instrument Python LLM apps with `neatlogs` — decorators, spans, prompt templates, framework integrations |
 | [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — span wrappers, auto-instrumentation, prompt templates |
+| [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — OpenTelemetry-based tracing for Gemini (`WrapGenAI`), Google ADK, and custom code; sessions & end-users via `Identify` |
 
 ## Installation
 

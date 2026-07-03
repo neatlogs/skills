@@ -10,7 +10,7 @@ description: >
 # NeatLogs TypeScript SDK — Agent Skill
 
 NeatLogs auto-instruments LLM calls, agent frameworks, and custom code with these core exports:
-`init()`, `flush()`, `shutdown()`, `span()`, `Span()`, `trace()`, `log()`, `PromptTemplate`, and `UserPromptTemplate`.
+`init()`, `flush()`, `shutdown()`, `span()`, `Span()`, `trace()`, `identify()`, `log()`, `PromptTemplate`, and `UserPromptTemplate`.
 
 ---
 
@@ -97,9 +97,7 @@ await init(options);
 | `workflowName` | `string` | derived from `process.argv[1]` | Name for this workflow/application |
 | `instrumentations` | `string[]` | `undefined` | Libraries to auto-instrument (e.g. `['openai', 'langchain']`) |
 | `tags` | `string[]` | `undefined` | Tags for filtering in dashboard |
-| `userId` | `string` | `undefined` | User identifier for trace attribution |
-| `autoSession` | `boolean` | `false` | Auto-generate a session ID |
-| `sessionId` | `string` | `undefined` | Explicit session ID — overrides `autoSession` |
+| `userId` | `string` | `undefined` | The **operator** running the SDK (developer / service account), NOT your app's end-user. For end-user & session identity, see **Sessions & End-Users** below |
 | `sampleRate` | `number` | `1.0` | Sampling rate (0.0 to 1.0) |
 | `flushInterval` | `number` | `5` | Seconds between batch flushes |
 | `batchSize` | `number` | `100` | Max spans per batch |
@@ -114,6 +112,31 @@ await init(options);
 | `metadata` | `Record<string, any>` | `undefined` | Custom metadata to attach to all spans |
 | `endpoint` | `string` | `'https://ingest.neatlogs.com'` | Backend endpoint URL |
 | `baseUrl` | `string` | `undefined` | Base URL for the Neatlogs API |
+
+---
+
+## Sessions & End-Users
+
+Track **your app's end-users** and group a conversation's turns so you can analyze usage/cost/errors per customer & segment, view multi-turn timelines, and do per-customer replay.
+
+Model: **one turn = one trace**; a **session** groups the turns of a conversation (pass the same `sessionId` on every turn). The end-user is per session. Identity is stamped on the **trace ROOT only** — the backend rolls it up; child spans ignore these fields. `init()` does **not** accept any session/end-user param.
+
+Three ways to declare identity (per-request):
+
+```typescript
+// 1. On a trace() root
+await trace({ name: 'turn', sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { plan: 'pro' } }, async () => { /* ... */ });
+
+// 2. On a span() root
+span({ kind: 'WORKFLOW', sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { plan: 'pro' } }, fn);
+
+// 3. Wrapper-only code (no root of your own — you only call neatlogs.wrap(...))
+await identify({ sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { plan: 'pro' } }, async () => {
+  await client.chat.completions.create(/* ... */); // the wrapper's auto-root inherits the identity (framework wrappers too, on recent versions)
+});
+```
+
+> **Browser SDK** (`neatlogs/browser`) uses the same field names — `endUserId`, `endUserMetadata`, `sessionId` — as client-constructor defaults or per-call on `trace()` / `trackAI()`.
 
 ---
 
@@ -135,6 +158,8 @@ Pass these string values in the `instrumentations` array to `init()`.
 | `mastra` | Mastra | `@neatlogs/instrumentation-mastra` (custom) |
 | `google_genai` | Google GenAI (`@google/genai`) | `@neatlogs/instrumentation-google-genai` (custom) |
 | `ai_sdk` | Vercel AI SDK (`ai`) | Built into `neatlogs/ai` (opt-in via `wrapAISDK(ai)`) |
+
+> **Explicit client wrappers** (alternative to the instrumentation key, mirroring Python's `neatlogs.wrap()`): `wrapGoogleGenAI` from `neatlogs/google-genai` (Gemini / AI Studio, `provider=google`) and `wrapVertexAI` from `neatlogs/vertex-ai` (Vertex mode, `provider=vertex_ai`) for `@google/genai` clients. Use the wrapper OR the `google_genai` instrumentation key — not both.
 
 ### Registered but Not Instrumentable (TS SDK v1)
 

@@ -287,9 +287,31 @@ interface TraceOptions {
 
 When `kind` is not provided, it defaults to `'CHAIN'`.
 
-### Session-Aware Root Traces
+### Sessions & end-user
 
-If `sessionId` is set in `init()` AND no active parent span exists, `trace()` creates a NEW root trace (for multi-turn conversations). Otherwise it creates a normal child span.
+Session and end-user identity are **per-request** and set at the **trace root** — never on `init()` (`init()` does NOT take `sessionId` / `autoSession`).
+
+Per turn, set them on the root `trace()` or `span()`:
+
+```typescript
+await trace(
+  { name: 'turn', sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { plan: 'pro' } },
+  async () => { /* this turn's work */ },
+);
+
+// or on a root span:
+await span({ kind: 'WORKFLOW', sessionId: 'conv_123', endUserId: 'u_456' }, fn)();
+```
+
+Wrapper-only code (only `wrap(...)` calls, no manual root) uses `identify()` — the wrapper's auto-root inherits it:
+
+```typescript
+await identify({ sessionId: 'conv_123', endUserId: 'u_456' }, async () => {
+  /* wrapped LLM call */
+});
+```
+
+Reuse the same `sessionId` on every turn to group them into one session; the end-user is per session. Identity is **root-only** — set it once on the root and the backend rolls it up across the trace.
 
 ### Span Object Methods
 

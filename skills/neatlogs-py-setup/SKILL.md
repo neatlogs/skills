@@ -63,6 +63,7 @@ Then layer your own `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` on top.
 ## Reference (for decision-making during steps 4-6)
 
 - Build the component inventory BEFORE instrumenting → `references/understand-first.md`
+- Sessions & end-users (group multi-turn conversations, per-customer analytics) → `references/sessions-and-end-users.md`
 - Span kinds and when to use each → `references/span-kinds.md`
 - What the wrapper/handler/processor already covers → `references/auto-instrumented.md`
 - LLM call patterns across all libraries → `references/llm-call-patterns.md`

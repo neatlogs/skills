@@ -53,3 +53,4 @@ Plus `wrapMastraRerank(rerank)` for the `@mastra/rag` `rerank()` function → **
 - **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the Mastra app runs inside Next.js, else the server 500s with `Can't resolve 'crypto'` and emits no traces.
 - Full span coverage matrix (entities → kinds → attributes, multi-provider, streaming) → `references/span-coverage.md`
 - Custom span()/trace() (only for non-Mastra code) → `references/decorators-and-traces.md`
+- Sessions & end-users (wrapper-only `identify()` per turn) → `references/sessions-and-end-users.md`

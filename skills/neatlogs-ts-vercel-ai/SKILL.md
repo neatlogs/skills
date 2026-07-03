@@ -44,5 +44,6 @@ If the project is a **Next.js** app (it has `next.config.*` / `app/` route handl
 ## Reference
 
 - **Next.js setup (serverExternalPackages + instrumentation.ts)** → `references/nextjs.md`
+- Sessions & end-users (per-turn `identify()`) → `references/sessions-and-end-users.md`
 - Custom span()/trace() (for grouping) → `references/decorators-and-traces.md`
 - Troubleshooting → `references/troubleshooting.md`

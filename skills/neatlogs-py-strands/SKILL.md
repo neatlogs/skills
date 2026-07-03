@@ -49,3 +49,4 @@ agent("Hello")
 ## Reference
 - Combining with @span/trace/log → `references/5-spans-trace-log.md`
 - Span kinds reference → `references/span-kinds.md`
+- Sessions & end-users → `references/sessions-and-end-users.md`

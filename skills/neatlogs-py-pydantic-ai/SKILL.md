@@ -52,3 +52,4 @@ The wrapper's AGENT/LLM/TOOL spans nest correctly under whatever `@span`/`trace`
 
 - Combining wrap() with @span/trace/log → `references/5-spans-trace-log.md`
 - Span kinds reference → `references/span-kinds.md`
+- Sessions & end-users (customer analytics) → `references/sessions-and-end-users.md`

@@ -97,3 +97,4 @@ You DO still add `@span` on your own functions and `neatlogs.trace()` + template
 
 - Span kinds → `references/span-kinds.md`
 - LLM call patterns → `references/llm-call-patterns.md`
+- Sessions & end-users → `references/sessions-and-end-users.md`

@@ -53,6 +53,31 @@
       "homepage": "https://neatlogs.com",
       "repository": "https://github.com/neatlogs/skills",
       "license": "MIT"
+    },
+    {
+      "name": "neatlogs-go",
+      "source": ".",
+      "description": "Instrument Go LLM applications with the neatlogs SDK — OpenTelemetry-based tracing for Google Gemini (genai), Google ADK agents, and custom code via Init, WrapGenAI, Trace, and Identify (sessions & end-users).",
+      "version": "1.0.0",
+      "category": "observability",
+      "keywords": [
+        "neatlogs",
+        "llm",
+        "observability",
+        "tracing",
+        "agents",
+        "go",
+        "golang",
+        "gemini",
+        "sdk"
+      ],
+      "author": {
+        "name": "NeatLogs",
+        "email": "neatlogs-support@neatlogs.com"
+      },
+      "homepage": "https://neatlogs.com",
+      "repository": "https://github.com/neatlogs/skills",
+      "license": "MIT"
     }
   ]
 }

@@ -122,7 +122,7 @@ await init({ debug: true });
 
 - Enables verbose logging to console (instrumentation status, span creation, export status)
 - Enables `log()` echo to console
-- Shows auto-generated session IDs, endpoint configuration, etc.
+- Shows endpoint configuration, resolved instrumentations, etc.
 
 ---
 
