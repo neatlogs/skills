@@ -9,7 +9,7 @@ from crewai import Crew, Process
 import neatlogs
 
 crew = Crew(agents=[...], tasks=[...], process=Process.sequential)
-crew = neatlogs.wrap(crew)          # patches kickoff + agents/tasks + BaseTool.run + LLM.call
+crew = neatlogs.wrap(crew)          # patches kickoff/train/test/... + agents/tasks + tool dispatch + LLM.call
 result = crew.kickoff()
 ```
 
@@ -18,7 +18,7 @@ result = crew.kickoff()
 ```
 WORKFLOW  crew.kickoff()
   ↳ AGENT   each agent's task execution
-  ↳ TOOL    BaseTool.run
+  ↳ TOOL    each tool call (BaseTool.run or CrewStructuredTool.invoke)
   ↳ LLM     LLM.call
 ```
 
@@ -39,8 +39,9 @@ WORKFLOW  crew.kickoff()
       return neatlogs.wrap(Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential))
   ```
 - **Flow** (`class MyFlow(Flow)`) → wrap the flow instance: `flow = neatlogs.wrap(MyFlow())` then `flow.kickoff()`.
+- **Standalone Agent** (no Crew, `agent.kickoff(messages=...)`) → wrap the agent instance: `agent = neatlogs.wrap(agent)` then `agent.kickoff(messages=...)`. Emits an `AGENT` span capturing `messages`.
 
-Wrapping is idempotent — wrapping twice is harmless. Wrap at least once, before kickoff.
+Wrapping is idempotent — wrapping twice is harmless. Wrap at least once, before the run entrypoint. `wrap()` covers ALL entrypoints on the instance — `kickoff` / `kickoff_async` / `akickoff` / `kickoff_for_each*`, and also `train` / `test` / `replay` — so a crew started via any of them is traced (no extra step needed).
 
 ## No provider instrumentor needed
 
@@ -61,6 +62,6 @@ result = crew.kickoff()
 
 ## Verify BEFORE moving to step 5
 
-1. Grep for `.kickoff(`. The crew/flow it's called on was passed through `neatlogs.wrap(...)` first.
+1. Grep for the run entrypoints (`.kickoff(`, `.train(`, `.test(`, `.replay(`, and `agent.kickoff(` for standalone agents). The crew/flow/agent each is called on was passed through `neatlogs.wrap(...)` first.
 2. `init()` has NO `instrumentations=` for CrewAI.
 3. `import neatlogs` is present in the file that calls `neatlogs.wrap(...)`.

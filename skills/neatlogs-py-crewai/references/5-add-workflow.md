@@ -26,7 +26,7 @@ That entry point gets `@span(kind="WORKFLOW")`.
 def create_researcher() -> Agent:
     return Agent(role="Researcher", goal="...", backstory="...")
 
-# ❌ WRONG — decorating a @tool. Tools are traced by wrap() (BaseTool.run).
+# ❌ WRONG — decorating a @tool. Tools are auto-traced by wrap() (both dispatch paths).
 @neatlogs.span(kind="TOOL")           # REMOVE
 @tool
 def web_search(query: str) -> str:
@@ -56,7 +56,7 @@ def main():
 
 - `create_*` agent factories → traced by wrap() as AGENT. Leave alone.
 - `Task(...)` definitions / task factories → traced by wrap(). Leave alone.
-- `@tool` functions → traced by wrap() (BaseTool.run) as TOOL. Leave alone.
+- `@tool` functions → auto-traced by wrap() (via CrewStructuredTool.invoke) as TOOL. Leave alone.
 
 ## Decorator Placement
 

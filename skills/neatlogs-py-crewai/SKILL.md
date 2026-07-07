@@ -4,37 +4,52 @@ description: Use when adding neatlogs observability to a Python project that use
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "3.0"
+  version: "3.1"
   language: python
   framework: crewai
 ---
 
 # Neatlogs Python Setup — CrewAI
 
-This project uses CrewAI. Neatlogs instruments it with **`neatlogs.wrap(crew)`** — wrap the Crew (or Flow) instance once and the full span hierarchy is auto-traced.
+This project uses CrewAI. Neatlogs instruments it with **`neatlogs.wrap(crew)`** — wrap the Crew (or Flow, or standalone Agent) instance once and the full span hierarchy is auto-traced.
 
 ## Core mechanism — `neatlogs.wrap(crew)`
 
-`neatlogs.wrap()` detects the CrewAI Crew/Flow and patches `kickoff` / `kickoff_async` / `kickoff_for_each`, the crew's agents and tasks, plus installs class-level hooks on `BaseTool.run` (TOOL) and `LLM.call` (LLM). Span tree:
+`neatlogs.wrap()` detects the CrewAI Crew/Flow/Agent and patches every run entrypoint, the crew's agents and tasks, plus installs class-level hooks on the tool dispatch paths (`BaseTool.run` AND `CrewStructuredTool.invoke`) and `LLM.call`. Span tree:
 
 ```
 WORKFLOW  crew.kickoff()
   ↳ AGENT   each agent's task execution
-  ↳ TOOL    BaseTool.run (each tool call)
+  ↳ TOOL    each tool call (BaseTool.run OR CrewStructuredTool.invoke)
   ↳ LLM     LLM.call (the underlying model request)
 ```
 
+Covered entrypoints: `kickoff` / `kickoff_async` / `akickoff` / `kickoff_for_each` / `kickoff_for_each_async` / `akickoff_for_each`, plus `train` / `test` / `replay`. Flows: `flow.kickoff` / `kickoff_async` / `akickoff`.
+
 **No `instrumentations=` and no provider pairing.** Older guidance paired `"crewai"` with a provider instrumentor (`"openai"`, `"anthropic"`, …) to get LLM spans. `wrap()` patches `LLM.call` directly, so it captures LLM spans regardless of the model backend — you do NOT pass `instrumentations=[...]` and do NOT need to match a provider to the model string.
+
+`wrap()` also auto-suppresses CrewAI's own built-in telemetry (the no-I/O `Crew Created` / `Task Created` / `Flow Creation` lifecycle spans), so those don't pollute your traces.
 
 Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own orchestration; the crew spans nest under them.
 
-## Tool spans are VERSION-DEPENDENT (still applies)
+## Standalone Agents (no Crew)
 
-`wrap()` patches `BaseTool.run`, which covers tools dispatched through it. But on **`crewai >=1.14`** some native tool calls bypass `BaseTool.run` and those TOOL spans can still be lost — add `with neatlogs.trace(...)` INSIDE those tool bodies. Retrieval/embedding tools should ALWAYS get a `trace(kind="RETRIEVER")` inside the body (any version) to capture `neatlogs.retrieval.*` attributes. Step 7 walks through the version check and patterns.
+`wrap()` also handles a standalone agent run — `agent.kickoff(messages=...)` with no Crew. Wrap the agent before kicking it off:
+
+```python
+agent = neatlogs.wrap(Agent(role="...", goal="...", backstory="...", tools=[...]))
+result = agent.kickoff(messages="What is 2+2?")
+```
+
+Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, with tool/LLM calls nested under it.
+
+## Tools are auto-traced — do NOT add manual tool spans
+
+`wrap()` traces tool calls on BOTH dispatch paths — `BaseTool.run` (for `BaseTool` subclasses) and `CrewStructuredTool.invoke` (for `@tool` function tools) — on every supported crewai version (0.130.x through 1.15.x). This is NOT version-dependent. Leave plain action tools undecorated: adding `@neatlogs.span` or a manual `trace(kind="TOOL")` inside a plain tool produces a DUPLICATE span. The only manual span is `trace(kind="RETRIEVER")` inside retrieval/embedding tools, to add `neatlogs.retrieval.*` attributes. Step 7 covers this.
 
 ## What you MUST do
 
-1. `crew = neatlogs.wrap(crew)` on the Crew/Flow instance before `kickoff()`.
+1. `crew = neatlogs.wrap(crew)` on the Crew/Flow/Agent instance before its run entrypoint (`kickoff` / `train` / `agent.kickoff` / …).
 2. (Recommended) Add `@neatlogs.span(kind="WORKFLOW")` on YOUR user-facing function that builds + kicks off the crew, so your orchestration code is the trace root and the crew nests under it.
 3. (Optional, for prompt management) attach templates to agents/tasks → `references/6-prompt-templates.md`.
 
@@ -46,7 +61,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 4. **Wrap the Crew with neatlogs.wrap()** → `references/4-wrap-crew.md`
 5. **Add a WORKFLOW span on your entry point** → `references/5-add-workflow.md`
 6. **Attach prompt templates (optional)** → `references/6-prompt-templates.md`
-7. **Tools — version check + what to trace** → `references/7-verify-tools.md`
+7. **Tools — auto-traced; what NOT to add** → `references/7-verify-tools.md`
 8. **Add flush/shutdown** → `references/8-flush-shutdown.md`
 
 ## Rules (apply to ALL steps)
@@ -62,6 +77,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - `@neatlogs.span()` goes BELOW framework decorators, closest to `def`.
 - Minimal edits only. Add wrap()/decorators + imports. Do not reformat or refactor.
 - NEVER add `@neatlogs.span()` to `@tool` functions, Agent definitions, or Task definitions — `wrap()` traces them.
+- NEVER add a manual `with neatlogs.trace(kind="TOOL")` inside a plain tool body — `wrap()` already emits a TOOL span, so this DUPLICATES it. The only in-tool span is `trace(kind="RETRIEVER")` for retrieval/embedding tools (Step 7).
 
 ## Reference
 

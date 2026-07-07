@@ -1,51 +1,50 @@
-# Step 7: Tools — Version Check + What to Trace
+# Step 7: Tools — What to Trace (and what NOT to)
 
-`wrap(crew)` patches `BaseTool.run`, which covers tools dispatched through it. But on newer `crewai` some native tool calls bypass `BaseTool.run`, so tool coverage still depends on the installed `crewai` version. Do the version check FIRST, then apply the matching rule.
+`wrap(crew)` auto-traces tool calls. It installs class-level hooks on BOTH tool
+dispatch paths CrewAI uses:
+- `BaseTool.run` — `BaseTool` subclasses that define their own `_run` (e.g. a
+  `class CalculatorTool(BaseTool)` with a `_run` method).
+- `CrewStructuredTool.invoke` — the path `@tool`-decorated **function tools** go
+  through (`ToolUsage._use` → `tool.invoke(...)`).
 
-## 0. Check the CrewAI version
+**This is version-independent.** Both paths are patched, so plain action tools
+emit a `crewai.tool.<name>` TOOL span (with input/output) on every supported
+crewai version — including old `0.130.x` and current `1.15.x`. You do NOT need a
+version check, and you do NOT add a manual `trace()` to plain tools.
 
-```bash
-python -c "import crewai; print(crewai.__version__)"
-```
+## Do NOT add `trace()`/`@neatlogs.span` to plain tools
 
-| Installed `crewai` | TOOL spans from wrap() reliable? |
-|---|---|
-| `>=1.9.3, <1.14` | YES — tool calls go through `BaseTool.run`, which `wrap()` patches → TOOL spans emitted. (This is the range the official examples pin.) |
-| `>=1.14` | NOT ALWAYS — some native tool calls bypass `BaseTool.run` (`ToolUsage._use` / `_handle_native_tool_calls`), so those TOOL spans can be lost. |
-
-> If the project allows it, prefer pinning `crewai>=1.9.3,<1.14` (matches neatlogs' own examples). On `>=1.14` add manual `trace()` inside the tool bodies you need visible.
-
-## NEVER use the `@neatlogs.span` decorator on tools
-
-Regardless of version, do NOT stack `@neatlogs.span(kind="TOOL")` above/below `@tool`. A decorator can't carry the rich `neatlogs.retrieval.*` / `neatlogs.tool.*` attributes and conflicts with the framework. When you need a tool span, use `with neatlogs.trace(...)` INSIDE the function body (below).
+Plain action tools (calculator, save_to_file, a web_search with no rich
+attributes) are already traced by `wrap()`. Adding a manual span is wrong two ways:
 
 ```python
-# ❌ WRONG — decorator. Loses attributes, conflicts with wrap()'s BaseTool.run hook.
+# ❌ WRONG — decorator. Loses attributes, conflicts with the framework.
 @neatlogs.span(kind="TOOL", tool_name="web_search")   # REMOVE
 @tool
 def web_search(query: str) -> str:
     ...
+
+# ❌ WRONG — manual trace() inside a PLAIN tool. wrap() already emits a TOOL span
+# for this tool, so this produces a DUPLICATE span.
+@tool("web_search")
+def web_search(query: str) -> str:
+    """Search the web."""
+    with neatlogs.trace("web_search", kind="TOOL"):   # REMOVE — double span
+        return _do_search(query)
+
+# ✅ RIGHT — leave the tool as-is; wrap() traces it.
+@tool("web_search")
+def web_search(query: str) -> str:
+    """Search the web."""
+    return _do_search(query)
 ```
 
-## What to do, by tool type
+## The ONE case for a manual `trace()`: retrieval/embedding tools
 
-### A. Plain action tools (calculator, save_to_file, web_search with no rich attrs)
-- crewai `<1.14`: leave undecorated — traced via `BaseTool.run`.
-- crewai `>=1.14`: add a `trace()` inside the body so the span isn't lost:
-  ```python
-  @tool("web_search")
-  def web_search(query: str) -> str:
-      """Search the web."""
-      with neatlogs.trace("web_search", kind="TOOL") as span:
-          span.set_attribute("neatlogs.tool.name", "web_search")
-          span.set_attribute("neatlogs.tool.input", query)
-          result = _do_search(query)
-          span.set_attribute("neatlogs.tool.output", str(result)[:2000])
-          return result
-  ```
-
-### B. Retrieval / embedding / external-IO tools (KB search, vector lookup) — ANY version
-Wrap the body with `kind="RETRIEVER"` and set `neatlogs.retrieval.*` so the dashboard shows query + documents. This is the pattern from the official `neatlogs_support_bot` example:
+Retrieval / embedding / vector-lookup tools should get a `with neatlogs.trace(kind="RETRIEVER")`
+inside the body — NOT because the tool would otherwise be untraced (wrap() traces
+it as a TOOL), but to upgrade it to a RETRIEVER span carrying the rich
+`neatlogs.retrieval.*` attributes (query + documents) the dashboard renders.
 
 ```python
 @tool("kb_search")
@@ -59,7 +58,8 @@ def kb_search_tool(query: str) -> str:
         return KB.format_results(results)
 ```
 
-Do this for retrieval tools on EVERY crewai version — even where auto-tracing works, the auto TOOL span lacks the `neatlogs.retrieval.*` attributes.
+This is the pattern from the official `neatlogs_support_bot` example. Do it for
+retrieval tools on every crewai version.
 
 ## Agents and Tasks — never decorate (all versions)
 
@@ -78,9 +78,7 @@ def create_researcher() -> Agent:
 
 ## Verification
 
-- [ ] Ran the crewai version check and applied the matching rule.
-- [ ] NO `@tool` function has a `@neatlogs.span(...)` DECORATOR.
-- [ ] Retrieval/embedding tools have `with neatlogs.trace(kind="RETRIEVER")` + `neatlogs.retrieval.*` INSIDE the body.
-- [ ] On crewai `>=1.14`, tools you need visible have a `trace()` inside the body (native calls that bypass `BaseTool.run` won't emit them).
+- [ ] Plain action tools (`@tool` functions and `BaseTool` subclasses) are LEFT AS-IS — no `@neatlogs.span` decorator and no manual `trace()` inside (wrap() auto-traces them; a manual span would duplicate).
+- [ ] Retrieval/embedding tools have `with neatlogs.trace(kind="RETRIEVER")` + `neatlogs.retrieval.*` INSIDE the body (enrichment, not coverage).
 - [ ] NO Agent factory or Task has `@neatlogs.span()`.
 - [ ] The crew was passed through `neatlogs.wrap(...)`; any `@neatlogs.span(kind="WORKFLOW")` is on your entry point (the `crew.kickoff()` caller).
