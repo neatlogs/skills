@@ -4,7 +4,7 @@ description: Use when adding neatlogs observability to a TypeScript/Node.js proj
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "2.0"
+  version: "3.0"
   language: typescript
   framework: langchain
 ---
@@ -13,43 +13,66 @@ metadata:
 
 This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). Neatlogs offers **two ways** to instrument it:
 
-1. **`instrumentations: ['langchain']`** on `init()` — zero-touch auto-tracing of LLM calls, chains, agents, tools, and retrievers. **Recommended** and used throughout this skill: init before the LangChain import, add ONE `span({ kind:'WORKFLOW' })` on the user-facing entry, done.
-2. **`langchainHandler()`** (from `neatlogs/langchain`) — a callback handler you attach per call via `{ callbacks: [langchainHandler()] }`. Use it when you want explicit, per-call control instead of global auto-instrumentation.
+1. **`langchainHandler()`** — a LangChain callback handler you attach per call via `{ callbacks: [handler] }`. This is the **recommended, first-class** path. This skill uses it throughout.
+2. **`instrumentations: ['langchain']`** on `init()` — zero-touch auto-instrumentation that patches at import time. Use it when you can't thread a handler through your code.
 
-Pick ONE — don't combine them (that double-traces). The rest of this skill shows the `instrumentations` approach.
+Pick ONE — don't combine them (that double-traces). The rest of this skill shows the handler approach.
 
-## Core mechanism
+## Core mechanism — `langchainHandler()`
 
-1. `await init({ instrumentations: ['langchain'] })` BEFORE importing `@langchain/*`.
-2. Dynamic-`import()` the LangChain modules AFTER init.
-3. `span({ kind:'WORKFLOW' }, fn)` on the entry that runs the chain/graph/agent. Everything inside is auto-traced.
+Create ONE handler and pass it via `{ callbacks: [handler] }` on the calls you want traced:
 
-## What the langchain instrumentation auto-traces (DO NOT manually wrap)
+```typescript
+import { init, langchainHandler, span, flush, shutdown } from 'neatlogs';
 
-- `llm.invoke()` / `.stream()` → LLM spans
-- chain / graph node execution → CHAIN spans
-- LangChain tools → TOOL spans
-- retrievers → RETRIEVER spans
+await init({ apiKey: process.env.NEATLOGS_API_KEY, workflowName: 'langchain-app' });
+
+const { ChatOpenAI } = await import('@langchain/openai');
+const llm = new ChatOpenAI({ model: 'gpt-4o' });
+
+const handler = langchainHandler();
+const res = await llm.invoke('Hello', { callbacks: [handler] });
+```
+
+### LangGraph: attach at the MODEL level inside nodes — NOT graph.invoke()
+
+For LangGraph, attach the handler to the **model call inside each node**, not to `graph.invoke()`. Attaching at the graph level produces duplicate, noisy chain spans.
+
+```typescript
+function analystNode(state) {
+  const response = await llm.invoke(messages, { callbacks: [handler] });  // model level ✅
+  return { messages: [response] };
+}
+// NOT: graph.invoke(state, { callbacks: [handler] });  // graph level ❌ (duplicates)
+```
+
+## What the handler captures (DO NOT manually wrap)
+
+- Chat-model / LLM calls → LLM span (model, tokens, latency)
+- Chain / node execution → CHAIN span
+- LangChain tools → TOOL span
+- Retrievers → RETRIEVER span
 
 ## Steps
 
 1. **Install** → `references/1-install.md`
-2. **Add init() (before LangChain import)** → `references/2-add-init.md`
+2. **Add init()** → `references/2-add-init.md`
 3. **Set environment variables** → `references/3-set-env.md`
-4. **Add the WORKFLOW span (and only that)** → `references/4-add-workflow.md`
+4. **Add the WORKFLOW span + attach handler** → `references/4-add-workflow.md`
 5. **Lifecycle (flush/shutdown)** → `references/5-lifecycle.md`
 
 ## Rules (apply to ALL steps)
 
 - `await init(...)` MUST run BEFORE any `@langchain/*` import. Use dynamic `import()` AFTER init.
-- `instrumentations: ['langchain']` covers LangChain AND LangGraph. The langchain instrumentor also captures the underlying LLM (no separate provider key needed for chat models routed through LangChain).
+- This skill uses the **callback handler**; do NOT ALSO pass `instrumentations: ['langchain']` to `init()` — running both double-traces.
+- Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For LangGraph attach at the model level inside nodes, NOT `graph.invoke()`.
 - The ONLY manual span you add is `span({ kind:'WORKFLOW' })` on the user-facing entry that runs the chain/graph/agent.
-- NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced; manual wrapping duplicates.
+- NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced by the handler; manual wrapping duplicates.
 - All lifecycle calls are async. Never hardcode API keys — use `process.env`.
 
 ## Reference
 
-- **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the project is a Next.js app, else the server 500s with `Can't resolve 'crypto'` and emits no traces.
+- **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the project is a Next.js app.
 - Custom span()/trace() (rare here) → `references/decorators-and-traces.md`
 - Sessions & end-users (per-turn `identify()` wrapper-only) → `references/sessions-and-end-users.md`
 - Prompt templates → `references/prompt-templates.md`
