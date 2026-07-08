@@ -38,16 +38,21 @@ model = ChatOpenAI(model="gpt-4o")
 result = model.invoke("Hello", config={"callbacks": [handler]})
 ```
 
-### LangGraph: attach at the MODEL level inside nodes — NOT graph.invoke()
+### LangGraph: attach at the GRAPH invocation — NOT the per-node model call
 
-For LangGraph, attach the handler to the **model call inside each node**, not to `graph.invoke()`. Attaching at the graph level duplicates events and produces noisy chain spans. (Same guidance the LangChain callback system gives generally.)
+For LangGraph, attach the handler at the **graph invocation** (`app.invoke(...)` / `ainvoke` / `stream` / `astream`), not on the per-node `llm.invoke()`. LangGraph fires the per-node `on_chain_start` only on the **graph-level callback manager**, so a handler passed to a single node's model call never sees the node boundaries — you get no node spans and the LLM span orphans to the workflow root (flat, no node hierarchy). Attach once at the graph invocation and each node gets its own span with the LLM nested under it (a manual `neatlogs.trace()` / `@span` inside a node nests under the node too).
 
 ```python
 def analyst_node(state):
-    response = llm.invoke(messages, config={"callbacks": [handler]})   # model level ✅
+    response = llm.invoke(messages)                                    # no per-node handler
     return {"messages": [response]}
-# NOT: graph.invoke(state, config={"callbacks": [handler]})           # graph level ❌ (duplicates)
+
+# ✅ attach at the graph invocation — nodes + nested LLMs all get spans
+app.invoke(state, config={"callbacks": [handler]})                     # graph level ✅
+# NOT: llm.invoke(messages, config={"callbacks": [handler]})           # per-node ❌ (no node spans, LLM orphans)
 ```
+
+(Plain LangChain — LCEL chains / bare `model.invoke()` — is the opposite: attach per model/chain call as in the example above. The graph-level rule is LangGraph-specific.)
 
 ### Deep Agents (`deepagents`) — prebuilt harness, attach on the top-level invoke
 
@@ -62,7 +67,7 @@ result = agent.invoke(
 )
 ```
 
-For hand-written LangGraph (your own nodes), prefer the model-level attach above. For prebuilt harnesses (Deep Agents), the top-level invoke is the only attach point — use it.
+For hand-written LangGraph (your own nodes) as well as prebuilt harnesses (Deep Agents), the top-level / graph invocation is the attach point — use it. (Consistent with the graph-level rule above.)
 
 Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own orchestration; the handler's spans nest under your manual spans.
 
@@ -90,7 +95,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - `neatlogs.init()` MUST execute BEFORE any LangChain library imports.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
 - This skill uses the **callback handler**; if you go that route, do NOT ALSO pass `instrumentations=["langchain"]` to `init()` — running both double-traces. (`instrumentations=["langchain"]` is a valid standalone alternative — see the intro — just don't combine the two. Provider instrumentors for embeddings are a separate concern — see step 7.5.)
-- Create ONE `neatlogs.langchain_handler()` and pass it via `config={"callbacks": [handler]}`. For LangGraph attach at the model level inside nodes, NOT `graph.invoke()`.
+- Create ONE `neatlogs.langchain_handler()` and pass it via `config={"callbacks": [handler]}`. For plain LangChain (LCEL chains / bare model calls) attach per model/chain call. For LangGraph attach at the graph invocation (`app.invoke(..., config={"callbacks": [handler]})`), NOT the per-node `llm.invoke()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
 - Add imports ONLY for what a file actually uses:
   - File calls `neatlogs.langchain_handler(...)` / `neatlogs.span(...)` / `neatlogs.trace(...)` → add `import neatlogs`.

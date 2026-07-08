@@ -34,17 +34,21 @@ const handler = langchainHandler();
 const res = await llm.invoke('Hello', { callbacks: [handler] });
 ```
 
-### LangGraph: attach at the MODEL level inside nodes — NOT graph.invoke()
+### LangGraph: attach at the GRAPH invocation — NOT the per-node model call
 
-For LangGraph, attach the handler to the **model call inside each node**, not to `graph.invoke()`. Attaching at the graph level produces duplicate, noisy chain spans.
+For LangGraph, attach the handler at the **graph invocation** (`app.invoke(...)` / `stream` / etc.), not on the per-node `llm.invoke()`. LangGraph fires the per-node `on_chain_start` only on the **graph-level callback manager**, so a handler passed to a single node's model call never sees the node boundaries — you get no node spans and the LLM span orphans to the workflow root (flat, no node hierarchy). Attach once at the graph invocation and each node gets its own span with the LLM nested under it.
 
 ```typescript
-function analystNode(state) {
-  const response = await llm.invoke(messages, { callbacks: [handler] });  // model level ✅
+async function analystNode(state) {
+  const response = await llm.invoke(messages);                   // no per-node handler
   return { messages: [response] };
 }
-// NOT: graph.invoke(state, { callbacks: [handler] });  // graph level ❌ (duplicates)
+// ✅ attach at the graph invocation — nodes + nested LLMs all get spans
+await app.invoke(state, { callbacks: [handler] });               // graph level ✅
+// NOT: await llm.invoke(messages, { callbacks: [handler] });    // per-node ❌ (no node spans, LLM orphans)
 ```
+
+(Plain LangChain — LCEL chains / bare `llm.invoke()` — is the opposite: attach per model/chain call as in the example above. The graph-level rule is LangGraph-specific.)
 
 ## What the handler captures (DO NOT manually wrap)
 
@@ -65,7 +69,7 @@ function analystNode(state) {
 
 - `await init(...)` MUST run BEFORE any `@langchain/*` import. Use dynamic `import()` AFTER init.
 - This skill uses the **callback handler**; do NOT ALSO pass `instrumentations: ['langchain']` to `init()` — running both double-traces.
-- Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For LangGraph attach at the model level inside nodes, NOT `graph.invoke()`.
+- Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For plain LangChain (LCEL chains / bare model calls) attach per model/chain call. For LangGraph attach at the graph invocation (`app.invoke(..., { callbacks: [handler] })`), NOT the per-node `llm.invoke()`.
 - The ONLY manual span you add is `span({ kind:'WORKFLOW' })` on the user-facing entry that runs the chain/graph/agent.
 - NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced by the handler; manual wrapping duplicates.
 - All lifecycle calls are async. Never hardcode API keys — use `process.env`.

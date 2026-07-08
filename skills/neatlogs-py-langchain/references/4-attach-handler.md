@@ -24,23 +24,28 @@ chain = prompt | model | parser
 result = chain.invoke({"question": q}, config={"callbacks": [handler]})
 ```
 
-## LangGraph — attach at the MODEL level inside nodes, NOT graph.invoke()
+## LangGraph — attach at the GRAPH invocation, NOT the per-node model call
 
-This is the important rule. Attach the handler to the **model call inside each node**. Do NOT attach it to `graph.invoke()` / `graph.ainvoke()` — that duplicates events and produces noisy chain spans.
+This is the important rule, and it is the OPPOSITE of plain LangChain. Attach the handler on the **graph invocation** (`app.invoke()` / `app.ainvoke()` / `app.stream()` / `app.astream()`). Do NOT attach it on a per-node `llm.invoke()`.
+
+Why: LangGraph fires the per-node `on_chain_start` only on the **graph-level callback manager**. A handler passed to a single node's model call never sees the node boundaries — so you get no node spans, and the LLM span orphans to the workflow root (flat, no node hierarchy). Attach once at the graph invocation and each node gets its own span with its LLM nested under it.
 
 ```python
 handler = neatlogs.langchain_handler()
 
 def analyst_node(state):
-    # ✅ model level
-    response = llm.invoke(state["messages"], config={"callbacks": [handler]})
+    # nodes invoke the model normally — NO per-node handler
+    response = llm.invoke(state["messages"])
     return {"messages": [response]}
 
-# ❌ DO NOT do this — graph-level attach duplicates spans
-# graph.invoke(state, config={"callbacks": [handler]})
+# ✅ graph level — nodes + nested LLM/tool spans all appear
+app.invoke(state, config={"callbacks": [handler]})
+
+# ❌ DO NOT do this — per-node attach yields no node spans; the LLM orphans to the root
+# llm.invoke(state["messages"], config={"callbacks": [handler]})
 ```
 
-If a node binds tools (`llm_with_tools = llm.bind_tools(...)`), attach on that call the same way: `llm_with_tools.invoke(msgs, config={"callbacks": [handler]})`.
+Tool-bound LLMs inside a node (`llm_with_tools = llm.bind_tools(...)`) also need no per-node handler — the graph-invocation handler covers them.
 
 ## Handler reuse
 
@@ -49,19 +54,22 @@ One handler instance is fine for the whole app — reuse it across nodes/calls. 
 ## WRONG vs RIGHT
 
 ```python
+# Plain LangChain (LCEL chain / bare model call):
 # ❌ WRONG — model invoked with no callbacks. Nothing traced.
 response = llm.invoke(messages)
-
-# ❌ WRONG — LangGraph handler attached at graph level. Duplicate / noisy spans.
-graph.invoke(state, config={"callbacks": [handler]})
-
-# ✅ RIGHT — handler attached at the model call inside the node.
+# ✅ RIGHT — attach on the model / chain call.
 response = llm.invoke(messages, config={"callbacks": [handler]})
+
+# LangGraph:
+# ❌ WRONG — per-node attach. No node spans; the LLM orphans to the root.
+response = llm.invoke(state["messages"], config={"callbacks": [handler]})
+# ✅ RIGHT — attach at the graph invocation. Nodes + nested LLMs all get spans.
+app.invoke(state, config={"callbacks": [handler]})
 ```
 
 ## Verify BEFORE moving to step 5
 
 1. Exactly one `neatlogs.langchain_handler()` is created and reused.
-2. Every model/chain call you want traced has `config={"callbacks": [handler]}`.
-3. LangGraph: the handler is attached at the model level inside nodes, NOT on `graph.invoke()`.
+2. Plain LangChain: every model/chain call you want traced has `config={"callbacks": [handler]}`.
+3. LangGraph: the handler is attached at the graph invocation (`app.invoke(..., config={"callbacks": [handler]})`), NOT on the per-node `llm.invoke()`.
 4. `import neatlogs` is present in the file that creates the handler.

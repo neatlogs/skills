@@ -43,14 +43,15 @@ def analyze(query: str):
 @neatlogs.span(kind="WORKFLOW", name="analytics_agent")
 def main():
     query = input("Enter your question: ")
-    result = graph.invoke({"messages": [HumanMessage(content=query)]})
+    # LangGraph: the handler goes on the graph invocation (see step 4).
+    result = graph.invoke({"messages": [HumanMessage(content=query)]}, config={"callbacks": [handler]})
     print(result["messages"][-1].content)
 
 # ✅ RIGHT — FastAPI route that invokes the graph
 @app.post("/analyze")
 @neatlogs.span(kind="WORKFLOW", name="analyze_endpoint")
 async def analyze_endpoint(request: AnalyzeRequest):
-    result = await graph.ainvoke({"messages": [HumanMessage(content=request.query)]})
+    result = await graph.ainvoke({"messages": [HumanMessage(content=request.query)]}, config={"callbacks": [handler]})
     return {"result": result["messages"][-1].content}
 ```
 
@@ -58,7 +59,7 @@ async def analyze_endpoint(request: AnalyzeRequest):
 
 The callback handler (Step 4) already creates spans for:
 - Every graph node execution
-- Every LLM call inside nodes (where the handler is attached)
+- Every LLM call inside nodes (the graph-invocation handler covers them)
 - Every tool call via ToolNode
 - Chain / LCEL execution
 
