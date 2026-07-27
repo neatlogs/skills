@@ -1,16 +1,20 @@
-# Step 4: Capture LLM calls (Gemini & Google ADK)
+# Step 4: Capture LLM calls (Gemini & direct providers)
 
-Two paths depending on how the app calls the model. Do the one(s) that apply.
+Pick the path(s) that match how the app calls models. The Go SDK uses a
+**private provider**, so nothing is auto-captured — every model call is
+instrumented explicitly.
 
 ## A. Gemini via `WrapGenAI`
 
 Wrap a `*genai.Client` (from `google.golang.org/genai`) once, then call the
 wrapped client **exactly like the raw one** — every `GenerateContent` becomes a
-traced LLM span with prompt/response text.
+traced LLM span with prompt/response text under an auto `workflow` root.
+`WrapGenAI` lives in the `contrib/genai` module (alias it `nlgenai`):
 
 ```go
 import (
     "github.com/neatlogs/neatlogs-go"
+    nlgenai "github.com/neatlogs/neatlogs-go/contrib/genai"
     "google.golang.org/genai"
 )
 
@@ -22,7 +26,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-gc := neatlogs.WrapGenAI(client) // wrap once
+gc := nlgenai.WrapGenAI(client) // wrap once
 
 temp := float32(0.7)
 resp, err := gc.GenerateContent(ctx, "gemini-2.5-flash",
@@ -38,6 +42,9 @@ resp, err := gc.GenerateContent(ctx, "gemini-2.5-flash",
 )
 ```
 
+`GenerateContent`, `GenerateContentStream`, `EmbedContent`, and `CountTokens` are
+traced; any other method is reachable via `gc.Raw()`.
+
 ### Reasoning-model note (important)
 
 `gemini-2.5-flash` is a **reasoning model** — its thinking tokens count against
@@ -45,29 +52,46 @@ resp, err := gc.GenerateContent(ctx, "gemini-2.5-flash",
 (`256`), or the model spends the budget on hidden reasoning and the visible
 output gets truncated or comes back empty.
 
-## B. Google ADK
+## B. Direct provider calls via `StartLLMSpan`
 
-`neatlogs.Init` registers the **global** OTel TracerProvider, and Google ADK
-emits its own spans through that provider — so ADK's trace **structure is
-captured automatically**. Do **NOT** wrap ADK for structure; there is nothing to
-wrap for the tree.
-
-The one gap: ADK records message **text** on OTel *logs*, not on spans — so the
-auto-captured spans have tokens/model/tools but not the prompt/response text. To
-also record that text on the span, wrap the **model**:
+For OpenAI / Anthropic / any provider `WrapGenAI` doesn't cover, open an LLM span
+you fill in. It auto-roots under a `workflow` span when there's no active parent.
 
 ```go
-import nladk "github.com/neatlogs/neatlogs-go/contrib/adk"
+ctx, llm := neatlogs.StartLLMSpan(ctx, neatlogs.LLMCallOptions{
+    Provider: "openai",              // neatlogs provider id
+    Model:    "gpt-5.5",
+    Messages: []neatlogs.LLMMessage{
+        {Role: "system", Content: "You are concise."},
+        {Role: "user", Content: "Explain goroutines in one sentence."},
+    },
+    // MaxTokens / Temperature / TopP / Streaming are optional.
+})
+defer llm.End()
 
-model = nladk.WrapModel(model) // adds I/O text capture to ADK's generate_content span
+// ... make the real provider call ...
+llm.SetOutputMessage("assistant", out)
+llm.SetUsage(promptTok, completionTok, totalTok)
+llm.SetFinishReason("stop")
+// llm.SetModel / llm.SetProvider allow a post-call override (alias / fallback).
 ```
 
-`WrapModel` is **I/O capture only** — it attaches prompt/response text onto ADK's
-existing `generate_content` span. It is **NOT** an auto-root: ADK still creates
-the root span. Use it purely to fill in the missing message text.
+Span name defaults to `"{provider}.chat"`; override with `LLMCallOptions.Name`.
+
+## Do NOT use `contrib/adk`
+
+The Google ADK integration (`contrib/adk`, `WrapModel`, A2A helpers) is
+**deprecated and non-functional**. It relied on `Init` registering the global
+OTel provider so ADK's own spans flowed through — but the SDK now uses a private
+provider and never touches global OTel state, so ADK spans never reach Neatlogs.
+There is no drop-in replacement for automatic ADK capture; instrument the model
+calls the agent makes with `StartLLMSpan`, and boundaries with `StartSpan` /
+`StartToolSpanFromHeaders`.
 
 ## Verify
 
-- Gemini: calls go through `gc` (the wrapped client), not the raw `client`.
-- ADK: no wrapping added for structure; `WrapModel` used only if you need message
-  text on spans.
+- Gemini: calls go through `gc` (the wrapped client), not the raw `client`, and
+  `WrapGenAI` is imported from `contrib/genai` (aliased `nlgenai`).
+- Direct providers: every model call is bracketed by `StartLLMSpan` … `llm.End()`
+  with output + usage set.
+- No `contrib/adk` import anywhere.

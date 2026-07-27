@@ -288,28 +288,27 @@ await shutdown();
 
 ## 9. Mastra
 
-- **Instrumentation key**: `instrumentations: ['mastra']`
-- **Package**: `@neatlogs/instrumentation-mastra`
+- **Wrapper**: `wrapMastra(entity)` from `neatlogs/mastra` (no extra package needed)
 
-Pass `instrumentations: ['mastra']` to `init()`, then use `getMastraObservability()` to get the observability config for the Mastra constructor:
+Wrap each Mastra entity with `wrapMastra` — it patches Agent/Workflow/Vector/Memory methods to emit spans. Init once at startup, before constructing entities:
 
 ```typescript
-import { init, getMastraObservability } from 'neatlogs';
-import { Mastra } from '@mastra/core/mastra';
+import { init } from 'neatlogs';
+import { wrapMastra } from 'neatlogs/mastra';
 
-await init({
-  apiKey: '...',
-  workflowName: 'mastra-app',
-  instrumentations: ['mastra'],
-});
+await init({ apiKey: '...', workflowName: 'mastra-app' });
 
-export const mastra = new Mastra({
-  agents: { /* ... */ },
-  observability: await getMastraObservability(),
-});
+const { Agent } = await import('@mastra/core/agent');
+const { openai } = await import('@ai-sdk/openai');
+
+const agent = wrapMastra(
+  new Agent({ name: 'assistant', instructions: 'Be concise.', model: openai('gpt-4o') }),
+);
 ```
 
 Mastra agent, workflow, tool, and LLM step spans are automatically captured.
+
+> **`getMastraObservability()` is deprecated and now throws.** Its native-observability bridge activates spans on the global OpenTelemetry context, which can't be isolated from co-tenant tracing SDKs. Use `wrapMastra()` instead.
 
 ---
 
@@ -329,7 +328,7 @@ import { wrapAISDK } from 'neatlogs/ai';
 import * as ai from 'ai';
 import { openai } from '@ai-sdk/openai';
 
-// 1. Initialize neatlogs first so a TracerProvider is registered globally
+// 1. Initialize neatlogs first (sets up its private TracerProvider — never registered globally)
 await init({ apiKey: '...', workflowName: 'ai-sdk-app' });
 
 // 2. Wrap the ai module — wraps generateText, streamText, generateObject, streamObject, embed, embedMany, rerank
@@ -348,7 +347,7 @@ await shutdown();
 Each wrapped call:
 1. Opens a parent OTel span on the active `TracerProvider` with `openinference.span.kind = 'WORKFLOW'` (for generateText/streamText/generateObject/streamObject) or `'CHAIN'` (for embed/embedMany/rerank). The AI SDK's native `ai.doGenerate` / `ai.doStream` child spans remain `LLM`; tool-call children remain `TOOL`.
 2. Forces `experimental_telemetry: { isEnabled: true, recordInputs: true, recordOutputs: true, tracer, metadata: { neatlogsWrapped: true } }` for that call. **`isEnabled: false` is overridden** — to skip telemetry for a specific call, use the unwrapped `ai` import directly.
-3. Captures `input.value` (always) and `output.value` (async functions only — streams cannot be JSON-serialized, so `output.value` is unset on streaming parents; native AI SDK child spans still share the trace).
+3. Captures `input.value` (always) and `output.value`. For `generateText`/`generateObject` this is the awaited result; for `streamText`/`streamObject` it's captured from the AI SDK's `onFinish` callback (with `gen_ai.finish_reason`), preserving any user-provided `onFinish`/`onError`. `generateObject`/`streamObject` structured output (`ai.response.object`) maps to the LLM child's output.
 4. Sets `SpanStatusCode.ERROR` on rethrown exceptions.
 
 ### Lower-level: `createAITelemetry`

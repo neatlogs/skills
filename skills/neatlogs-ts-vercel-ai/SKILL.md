@@ -15,7 +15,7 @@ This project uses the Vercel AI SDK (`ai` package: `generateText`, `streamText`,
 
 ## Core mechanism (DIFFERENT from other skills)
 
-1. `await init({ ... })` first (registers the global tracer). **No `instrumentations: ['ai_sdk']` needed — that key is a no-op; the wrapper does the work.**
+1. `await init({ ... })` first (sets up Neatlogs' private tracer — never registered globally). **No `instrumentations: ['ai_sdk']` needed — that key is a no-op; the wrapper does the work.**
 2. `const { generateText, streamText, ... } = wrapAISDK(ai)` — wrap the `ai` module.
 3. Use the WRAPPED functions exactly like the originals. Each wrapped call auto-creates a WORKFLOW/CHAIN parent span + native `ai.doGenerate`/`doStream` LLM children + tool-call TOOL children.
 

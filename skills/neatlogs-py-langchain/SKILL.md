@@ -78,6 +78,8 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - Retriever calls → RETRIEVER span
 - Chain / node execution → CHAIN span
 
+Token usage is read from both LangChain's standard `usage_metadata` and provider `llm_output.token_usage`, normalized to `neatlogs.llm.token_count.*` across providers — including Gemini (`prompt_token_count` / `candidates_token_count`), cache tokens, and reasoning tokens. Async callbacks (`ainvoke` / `astream`) are supported, and LangGraph node spans use the bare node name (e.g. `researcher`). Nothing to configure.
+
 ## Steps
 
 1. **Install SDK** → `references/1-install-sdk.md`

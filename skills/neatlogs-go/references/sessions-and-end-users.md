@@ -20,8 +20,9 @@ timeline; and replay a specific customer's conversation when they reach out.
 
 `neatlogs.Identify` binds identity onto a `context.Context` and returns a new
 `ctx`. Anything that runs under that `ctx` inherits it — `neatlogs.Trace`, the
-`WrapGenAI` auto-root, **and** Google ADK passthrough spans (via the identity
-processor). There is nothing else to call.
+`WrapGenAI` auto-root, and the explicit span helpers (`StartLLMSpan`,
+`StartRetrieverSpan`, `StartToolSpanFromHeaders`). The identity processor stamps
+it on the trace **root** only. There is nothing else to call.
 
 ```go
 ctx = neatlogs.Identify(ctx, neatlogs.IdentifyOptions{
@@ -40,7 +41,7 @@ Re-bind identity at the start of each turn (same `SessionID` + `EndUserID`),
 then run the turn under that `ctx`:
 
 ```go
-gc := neatlogs.WrapGenAI(client)
+gc := nlgenai.WrapGenAI(client) // from contrib/genai
 sessionID := "conv_123"
 
 for _, msg := range conversation {
@@ -58,15 +59,19 @@ for _, msg := range conversation {
 Each `GenerateContent` is its own trace; all carry `SessionID: conv_123` +
 `EndUserID: u_456`, so the backend groups them into one session for that user.
 
-## ADK passthrough
+## Direct provider / boundary spans
 
-Same call — bind identity on `ctx`, run the ADK agent under it; ADK's own root
-span inherits the session + end-user via the identity processor (no extra wrap):
+Same call — bind identity on `ctx`, then open the span under it; the auto-root
+inherits the session + end-user via the identity processor:
 
 ```go
 turnCtx := neatlogs.Identify(ctx, neatlogs.IdentifyOptions{SessionID: "conv_123", EndUserID: "u_456"})
-runner.Run(turnCtx, /* ... */)   // ADK spans pick up identity from turnCtx
+_, llm := neatlogs.StartLLMSpan(turnCtx, neatlogs.LLMCallOptions{Provider: "openai", Model: "gpt-5.5", Messages: msgs})
+defer llm.End()
 ```
+
+`StartToolSpanFromHeaders` also takes `IdentifyOptions` directly, so a service
+boundary can continue the inbound trace and bind identity in one call.
 
 ## Custom `Trace` roots
 

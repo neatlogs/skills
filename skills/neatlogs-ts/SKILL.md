@@ -33,7 +33,7 @@ Requires Node.js >= 18.
 2. **Scripts**: end with `await flush()` then `await shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` or `shutdown()` on every request.
 3. **Use `span()` wrappers** for custom code; use `trace()` callback wrapper for prompt template tracking or custom attributes.
 4. **Prefer auto-instrumentation** (`instrumentations: ['openai']`) over manual wrapping when possible.
-5. **Init is single-shot**: `init()` configures the global telemetry provider. Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
+5. **Init is single-shot**: `init()` configures a **private** telemetry provider (never registered globally — see OTel Isolation below). Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
 6. **All lifecycle functions are async**: `init()`, `flush()`, and `shutdown()` return Promises and must be awaited.
 7. **Named imports**: Always use named imports from `'neatlogs'`.
 
@@ -112,6 +112,38 @@ await init(options);
 | `metadata` | `Record<string, any>` | `undefined` | Custom metadata to attach to all spans |
 | `endpoint` | `string` | `'https://ingest.neatlogs.com'` | Backend endpoint URL |
 | `baseUrl` | `string` | `undefined` | Base URL for the Neatlogs API |
+| `tracerProvider` | `BasicTracerProvider` | `undefined` | Caller-owned private provider. Neatlogs adds its processors + flushes it, but never registers it globally or shuts it down |
+| `registerShutdownHandlers` | `boolean` | `true` when Neatlogs owns the provider, else `false` | Register `beforeExit`/`SIGTERM`/`SIGINT` flush + shutdown handlers |
+
+---
+
+## OTel Isolation
+
+Neatlogs runs on a **private `TracerProvider` and a private active-context store** — it never registers globally, and never adopts or shuts down a foreign global provider. A co-tenant tracer's active span (Datadog, Braintrust, another OTel SDK) can't become a Neatlogs parent, and vice-versa; `trace()`, auto-roots, `log()`, and `isRootSpan()` all resolve the active span from the private store.
+
+- **`tracerProvider`** (init option): pass your own `BasicTracerProvider` — the SDK adds processors + flushes but never registers it globally or shuts it down.
+- **`registerShutdownHandlers`** (init option): `beforeExit`/`SIGTERM`/`SIGINT` flush + shutdown; defaults `true` when Neatlogs owns the provider (so scripts drain spans), `false` when you pass `tracerProvider`.
+- **`injectTraceContext(carrier)`**: opt-in W3C `traceparent`/`tracestate` propagation at a cross-process boundary (the global OTel propagator is deliberately NOT used). Returns `false` if no valid Neatlogs span is active. `carrier` is `Record<string,string>` or anything with `set(name, value)` (e.g. a `Headers`).
+
+```typescript
+import { injectTraceContext } from 'neatlogs';
+const headers: Record<string, string> = {};
+if (injectTraceContext(headers)) await fetch(url, { headers });
+```
+
+---
+
+## Trace Output
+
+`setTraceOutput(value)` stamps `neatlogs.trace.output` on the active trace's ROOT span, so the dashboard shows a meaningful output instead of a raw status object (e.g. an agent that suspends awaiting input). No-op outside a trace; never throws.
+
+```typescript
+import { trace, setTraceOutput } from 'neatlogs';
+await trace({ name: 'turn', sessionId }, async () => {
+  const plan = await proposePlan();
+  setTraceOutput(plan.title); // show the plan, not the raw status object
+});
+```
 
 ---
 
@@ -180,6 +212,7 @@ For deep dives, see the companion reference files:
 - **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
 - **Troubleshooting** and common mistakes → [`references/troubleshooting.md`](references/troubleshooting.md)
+- **Multiple independent workflows in one codebase** (a copilot + a summarizer + a background job, each a distinct dashboard workflow) → use the `neatlogs-multi-workflow` skill. `workflowName` on `init()` is process-wide/single-shot; give each feature its own `WORKFLOW` root via `trace({ name, kind: 'WORKFLOW', attributes: { 'neatlogs.workflow.name': ... } }, …)`.
 
 ---
 

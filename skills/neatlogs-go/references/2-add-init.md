@@ -3,7 +3,7 @@
 ## Action
 
 1. Find the application entry point (`main.go`, or wherever the process starts).
-2. `Init` MUST run **once**, early, before any LLM/ADK work. It registers the global OTel TracerProvider — call it a single time per process.
+2. `Init` MUST run **once**, early, before any LLM work. It configures a **private** OTel TracerProvider (it does NOT register the global provider or propagator) — call it a single time per process.
 3. Call `Init` and `defer shutdown(ctx)` immediately. `shutdown` flushes buffered spans; without it, spans exit with the process **unexported and lost**.
 
 ## Pattern

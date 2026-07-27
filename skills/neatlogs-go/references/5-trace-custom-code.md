@@ -1,25 +1,39 @@
 # Step 5: Trace custom code
 
 Wrap any block of your own code (handlers, tools, pipeline stages) in a span with
-`neatlogs.Trace`. It returns a **new ctx**, the span, and an `end` func.
+`neatlogs.Trace` (a `workflow` root) or `neatlogs.StartSpan` (an explicitly-typed
+span at a boundary). Both return a **new ctx**, the span, and an `end` func.
 
 ```go
-ctx, span, end := neatlogs.Trace(ctx, "handle_request")
+ctx, span, end := neatlogs.Trace(ctx, "handle_request") // workflow root
 defer end()
 _ = span
+
+// Or a typed child span (kind = "tool", "chain", "agent", …):
+ctx, toolSpan, endTool := neatlogs.StartSpan(ctx, "lookup_account", "tool")
+defer endTool()
+_ = toolSpan
 ```
+
+## Boundary helpers
+
+Two helpers cover common non-LLM boundaries (both auto-root and use the private
+provider):
+
+- **`neatlogs.StartRetrieverSpan(ctx, name, query, topK)`** → `(ctx, *RetrieverSpan)` — vector search / RAG / memory recall. Call `r.SetDocuments(docs, len(docs))` then `r.End()`. An empty result set is recorded as `"[]"`, never omitted.
+- **`neatlogs.StartToolSpanFromHeaders(ctx, headers, toolName, input, neatlogs.IdentifyOptions{})`** → `(ctx, *ToolSpan)` — continue an inbound trace from request headers and open a `tool` span. Call `t.SetOutput(out)` then `t.End()`.
 
 ## The rules
 
 - `defer end()` immediately — it closes the span when the function returns.
 - **Pass the returned `ctx` to children.** Nesting is by context: a `Trace` (or a
-  `WrapGenAI` / ADK call) that receives this `ctx` becomes a **child** of this
-  span. Reuse the old ctx instead and the child ends up detached.
+  `WrapGenAI` / `StartLLMSpan` call) that receives this `ctx` becomes a **child**
+  of this span. Reuse the old ctx instead and the child ends up detached.
 
 ## Nested example
 
 ```go
-func handleRequest(ctx context.Context, gc *neatlogs.GenAIModels, req Request) error {
+func handleRequest(ctx context.Context, gc *nlgenai.GenAIModels, req Request) error {
     ctx, _, end := neatlogs.Trace(ctx, "handle_request") // root for this request
     defer end()
 
@@ -60,5 +74,5 @@ parseInput(ctx, req) // nests correctly
 
 ## Verify
 
-Every `neatlogs.Trace` is followed by `defer end()`, and the ctx it returns is
-the one handed to any nested `Trace` / LLM / ADK call.
+Every `neatlogs.Trace` / `StartSpan` is followed by `defer end()`, and the ctx it
+returns is the one handed to any nested `Trace` / `StartLLMSpan` / `WrapGenAI` call.

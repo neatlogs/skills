@@ -32,7 +32,7 @@ This is the GENERIC procedure. If the project uses a known framework/SDK, use it
 
 Neatlogs instruments LLM/agent calls by **wrapping the client/agent** — not by a global `instrumentations=[...]` list:
 
-- **`neatlogs.wrap(x)`** — auto-detects and patches OpenAI/Anthropic/Google-GenAI clients, CrewAI Crew, Pydantic AI Agent, DSPy module, Agno agent, Google ADK runner. One call per instance.
+- **`neatlogs.wrap(x)`** — auto-detects and patches OpenAI/Anthropic/Google-GenAI clients, CrewAI Crew, Pydantic AI Agent, DSPy module, Agno agent, Google ADK runner. One call per instance. Extra keyword args are stamped on the root WORKFLOW span as `neatlogs.workflow.<key>` (searchable metadata), e.g. `neatlogs.wrap(OpenAI(), route="/api/chat", surface="copilot")` — but session/end-user identity goes through `identify()`, not `wrap()` kwargs.
 - **`neatlogs.langchain_handler()`** — LangChain callback handler, passed via `config={"callbacks": [handler]}`.
 - **`neatlogs.openai_agents_processor()`** — OpenAI Agents SDK trace processor, registered via `add_trace_processor(...)`.
 - **Strands** — self-instruments via native OTel; `init()` alone captures it.

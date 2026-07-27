@@ -10,7 +10,7 @@ description: >
 # NeatLogs — Agent Skill
 
 NeatLogs auto-instruments LLM calls, agent frameworks, and custom code. The small public API most integrations need:
-`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `identify()`, `SystemPromptTemplate`, `UserPromptTemplate`, `bind_templates()`, `register_crewai_task()`.
+`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `identify()`, `inject_trace_context()`, `extract_trace_context()`, `SystemPromptTemplate`, `UserPromptTemplate`, `bind_templates()`, `register_crewai_task()`.
 
 ---
 
@@ -203,6 +203,8 @@ def search(query: str) -> str:
 | `pii_span_types` | `Optional[list[str]]` | `None` | Override which span types have PII redaction applied. `None` = use team dashboard config |
 | `capture_logs` | `bool` | `False` | Capture `neatlogs.log()`, stdlib `logging.*()`, and `print()` (via `capture_stdout=True` on `@span`) as LOG spans |
 | `mask` | `callable` | `None` | Client-side mask function `(span_dict) -> span_dict` — see [Data Masking](#data-masking-and-pii) |
+| `isolate` | `Optional[bool]` | `None` | Route ALL neatlogs spans through a private tracer provider. `None` = auto-detect (isolates when a co-tenant LLM-observability tool like OpenLLMetry / Langfuse owns the global provider); `True`/`False` force the decision |
+| `tracer_provider` | `Optional[Any]` | `None` | A private `TracerProvider` you created but did NOT install as the OTel global — neatlogs emits every span into it and never claims the global meter/logger. For full isolation from a co-tenant OTel pipeline. Implies isolation |
 
 ---
 
@@ -229,6 +231,38 @@ def handle_turn(...):
 with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"}):
     client.chat.completions.create(...)
 ```
+
+---
+
+## Cross-Process Propagation
+
+To keep **one logical trace** when a request crosses a service boundary (Python → Python/Go, gateway → worker), carry the active span as W3C `traceparent`/`tracestate` headers: the **caller injects**, the **callee extracts**. Both helpers use NeatLogs' **private** propagator — they never read or replace the global OTel propagator, so propagation stays isolated from any co-tenant tracer (Datadog / Langfuse / OpenLLMetry).
+
+- **`neatlogs.inject_trace_context(carrier) -> bool`** — caller side, right before an outbound request. `carrier` is any mutable header mapping (a `dict`, a `requests` `CaseInsensitiveDict`, …). Returns `True` when a NeatLogs span was active and headers were written; `False` when nothing is active (carrier untouched). An upstream `traceparent` already present is preserved, not overwritten.
+- **`neatlogs.extract_trace_context(carrier, *, session_id=None, end_user_id=None, end_user_metadata=None)`** — callee side, a **context manager**. Inside it the next `trace()` / `@span` / `wrap()` root nests under the remote span and shares its `trace_id`. No valid `traceparent` → no-op passthrough (identity still binds).
+
+```python
+import neatlogs, requests
+
+# Caller — inject before sending.
+with neatlogs.trace("caller"):
+    headers = {"content-type": "application/json"}
+    if neatlogs.inject_trace_context(headers):
+        requests.post(url, headers=headers, json=payload)
+
+# Callee (e.g. a FastAPI/Flask handler) — extract to continue the trace.
+@app.post("/tool")
+def handle(req):
+    with neatlogs.extract_trace_context(
+        req.headers,
+        session_id=req.session_id,   # identity does NOT ride the wire — re-bind it here
+        end_user_id=req.user_id,
+    ):
+        with neatlogs.trace("do_tool"):   # joins the caller's trace as a child
+            ...
+```
+
+> Use these helpers, **NOT** a bare `opentelemetry.propagate.inject(headers)` — the bare call reads the global propagator, which under NeatLogs' private-provider isolation does not see the active span and writes an empty carrier. Identity (`session_id` / `end_user_id`) does not travel on the `traceparent`; re-bind it on the callee from the request payload. Peers in Go (`InjectTraceContext` / `ExtractTraceContext`) and TypeScript (`injectTraceContext`, inject-only) speak the same W3C wire format.
 
 ---
 
@@ -295,6 +329,7 @@ For deep dives, see the companion reference files:
 - **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
 - **Troubleshooting** and common mistakes → [`references/troubleshooting.md`](references/troubleshooting.md)
+- **Multiple independent workflows in one codebase** (a copilot + a summarizer + a background job, each a distinct dashboard workflow) → use the `neatlogs-multi-workflow` skill. `init(workflow_name=...)` is process-wide/single-shot; give each feature its own `WORKFLOW` root and set `neatlogs.workflow_name` on it via `span.set_attribute(...)`.
 
 ---
 

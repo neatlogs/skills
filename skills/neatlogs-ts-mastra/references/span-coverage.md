@@ -21,7 +21,7 @@ What each wrapped Mastra entity produces, and the canonical `neatlogs.*` attribu
 
 **AGENT** — `neatlogs.span.kind`, `neatlogs.agent.name`, `neatlogs.agent.input`, `neatlogs.agent.output`, `neatlogs.llm.model_name`, `neatlogs.llm.system_prompt`, `neatlogs.llm.is_streaming` (stream only).
 
-**LLM** — `neatlogs.llm.model_name`, `neatlogs.llm.provider`, `neatlogs.llm.token_count.{prompt,completion,total}`, `neatlogs.llm.stop_reason`, `neatlogs.llm.invocation_parameters`, `neatlogs.llm.temperature` / `max_tokens` / `top_p` / `top_k` / `frequency_penalty` / `presence_penalty` (when set), `neatlogs.llm.tools.{i}` (advertised tools), `neatlogs.llm.tool_calls.{i}.{id,name,arguments}`, `neatlogs.llm.output_messages.0.{role,content}`, `neatlogs.llm.input`.
+**LLM** — `neatlogs.llm.model_name`, `neatlogs.llm.provider`, `neatlogs.llm.token_count.{prompt,completion,total,reasoning,cache_read,cache_write}` (reasoning/cache emitted when the provider reports them), `neatlogs.llm.stop_reason`, `neatlogs.llm.invocation_parameters`, `neatlogs.llm.temperature` / `max_tokens` / `top_p` / `top_k` / `frequency_penalty` / `presence_penalty` (when set), `neatlogs.llm.tools.{i}` (advertised tools), `neatlogs.llm.tool_calls.{i}.{id,name,arguments}`, `neatlogs.llm.input_messages.{i}.{role,content}` (indexed — message 0 role=`system` is the agent instructions, registered as a managed prompt template at ingest), `neatlogs.llm.output_messages.0.{role,content}`, `neatlogs.llm.input`.
 
 **TOOL** — `neatlogs.tool.name`, `neatlogs.tool.description`, `neatlogs.tool.input`, `neatlogs.tool.output`.
 

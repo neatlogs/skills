@@ -29,7 +29,7 @@ const { text } = await generateText({
 - A parent span: `WORKFLOW` for generateText/streamText/generateObject/streamObject; `CHAIN` for embed/embedMany/rerank.
 - The AI SDK's native `ai.doGenerate`/`ai.doStream` child spans → `LLM`.
 - Tool-call children → `TOOL`.
-- Captures model, tokens, input/output (output on async calls; streams don't serialize output on the parent).
+- Captures model, tokens, input/output. `generateText`/`generateObject` capture the awaited result; `streamText`/`streamObject` capture `output.value` + `gen_ai.finish_reason` from the AI SDK `onFinish` callback (any user `onFinish`/`onError` is preserved). `generateObject`/`streamObject` structured output maps to the LLM child's output.
 
 ## Converting existing call sites
 
