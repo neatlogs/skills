@@ -65,9 +65,6 @@ neatlogs.init(api_key=os.getenv("NEATLOGS_API_KEY"), ...)
 
 The SDK CAN read NEATLOGS_API_KEY from env internally, but only if `load_dotenv()` ran first AND the env var is available in the process. Passing it explicitly guarantees it works in all cases: Docker, CI, systemd, cron, and projects that don't use dotenv.
 
-## Do NOT pass endpoint=
-
-Leave `endpoint=` out of `init()`. The SDK defaults to the managed Neatlogs cloud, which is correct for production. Self-hosted/staging/local backends are a deployment concern configured outside the application code — do not bake an endpoint into the source.
 
 ## Verify BEFORE moving to step 3
 

@@ -29,11 +29,11 @@ Requires Node.js >= 18.
 
 ## Core Principles
 
-1. **Import order matters**: `await init()` MUST be called **before** importing any LLM libraries (OpenAI, Anthropic, etc.) for auto-instrumentation patching to work. Use dynamic `import()` for LLM libraries after init.
+1. **Import order does NOT matter**: instrumentation is per-instance via a `wrap*` helper (`wrapOpenAI(new OpenAI())`), so static top-of-file imports are fine. No dynamic `import()` gymnastics.
 2. **Scripts**: end with `await flush()` then `await shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` or `shutdown()` on every request.
 3. **Use `span()` wrappers** for custom code; use `trace()` callback wrapper for prompt template tracking or custom attributes.
-4. **Prefer auto-instrumentation** (`instrumentations: ['openai']`) over manual wrapping when possible.
-5. **Init is single-shot**: `init()` configures a **private** telemetry provider (never registered globally — see OTel Isolation below). Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
+4. **NEVER pass `instrumentations: [...]` for a provider or framework — `init()` THROWS.** Every provider/framework key (`openai`, `anthropic`, `langchain`, `bedrock`, `mcp`, `beeai`, `claude_agent_sdk`, `google_genai`, `mastra`, `ai_sdk`, `azure_openai`, `vertexai`, `openrouter_agent`, `opencode`) is rejected because its auto-instrumentor drives the **global** OTel context and cannot be isolated. Use the explicit helper from the [Supported Instrumentations](#supported-instrumentations) table.
+5. **Init is single-shot**: `init()` configures a **private** telemetry provider (never registered globally — see [OTel Isolation](#otel-isolation)). Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
 6. **All lifecycle functions are async**: `init()`, `flush()`, and `shutdown()` return Promises and must be awaited.
 7. **Named imports**: Always use named imports from `'neatlogs'`.
 
@@ -44,18 +44,16 @@ Requires Node.js >= 18.
 Complete minimal working example:
 
 ```typescript
-import { init, span, flush, shutdown } from 'neatlogs';
+import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? '',
   workflowName: 'my-app',
-  instrumentations: ['openai'],
 });
 
-// NOW import the LLM library (after init)
-const { OpenAI } = await import('openai');
-
-const client = new OpenAI();
+// wrapOpenAI patches THIS instance — import order is irrelevant.
+const client = wrapOpenAI(new OpenAI());
 
 const myWorkflow = span({ kind: 'WORKFLOW' }, async (query: string) => {
   const response = await client.chat.completions.create({
@@ -76,10 +74,10 @@ await shutdown();
 
 1. **Assess**: Detect what LLM providers/frameworks the project uses.
 2. **Instrument**: Choose the correct approach:
-   - Auto-instrumentation for providers → add to `instrumentations: []`
+   - Providers/frameworks → the matching `wrap*` helper / handler / processor (see [Supported Instrumentations](#supported-instrumentations))
    - `span()` wrappers for custom orchestration code
    - `trace()` for prompt template tracking or custom span attributes
-3. **Init**: Add `await init()` **BEFORE** any LLM library dynamic imports with the correct `instrumentations` list.
+3. **Init**: Add `await init()` once at startup, with **no** `instrumentations` key.
 4. **Verify**: Check the NeatLogs dashboard for incoming traces.
 
 ---
@@ -95,9 +93,9 @@ await init(options);
 |---|---|---|---|
 | `apiKey` | `string` | `undefined` | API key (or set `NEATLOGS_API_KEY` env var). If neither is set, spans are created locally but **silently not exported** |
 | `workflowName` | `string` | derived from `process.argv[1]` | Name for this workflow/application |
-| `instrumentations` | `string[]` | `undefined` | Libraries to auto-instrument (e.g. `['openai', 'langchain']`) |
+| `instrumentations` | `string[]` | `undefined` | **Do not use.** `init()` THROWS for every provider/framework key — see [Core Principles](#core-principles) #4 and [Why the instrumentations key throws](#why-the-instrumentations-key-throws) |
 | `tags` | `string[]` | `undefined` | Tags for filtering in dashboard |
-| `userId` | `string` | `undefined` | The **operator** running the SDK (developer / service account), NOT your app's end-user. For end-user & session identity, see **Sessions & End-Users** below |
+| `userId` | `string` | `undefined` | The **operator** running the SDK (developer / service account), NOT your app's end-user. For end-user & session identity, see [Sessions & End-Users](#sessions--end-users) |
 | `sampleRate` | `number` | `1.0` | Sampling rate (0.0 to 1.0) |
 | `flushInterval` | `number` | `5` | Seconds between batch flushes |
 | `batchSize` | `number` | `100` | Max spans per batch |
@@ -174,32 +172,44 @@ await identify({ sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { p
 
 ## Supported Instrumentations
 
-Pass these string values in the `instrumentations` array to `init()`.
+**There is no `instrumentations: [...]` path in the TypeScript SDK.** Each library gets an explicit helper you attach to the object yourself. This is the ONLY supported mechanism.
 
-### Working Instrumentations (TS SDK v1)
-
-| Key | Library | Package |
+| Library | Helper | Import from |
 |---|---|---|
-| `openai` | OpenAI | `@arizeai/openinference-instrumentation-openai` |
-| `anthropic` | Anthropic | `@arizeai/openinference-instrumentation-anthropic` |
-| `langchain` | LangChain | `@arizeai/openinference-instrumentation-langchain` |
-| `bedrock` | AWS Bedrock | `@arizeai/openinference-instrumentation-bedrock` |
-| `mcp` | Model Context Protocol | `@arizeai/openinference-instrumentation-mcp` |
-| `beeai` | BeeAI | `@arizeai/openinference-instrumentation-beeai` |
-| `claude_agent_sdk` | Claude Agent SDK | `@arizeai/openinference-instrumentation-claude-agent-sdk` |
-| `mastra` | Mastra | `@neatlogs/instrumentation-mastra` (custom) |
-| `google_genai` | Google GenAI (`@google/genai`) | `@neatlogs/instrumentation-google-genai` (custom) |
-| `ai_sdk` | Vercel AI SDK (`ai`) | Built into `neatlogs/ai` (opt-in via `wrapAISDK(ai)`) |
+| `openai` | `wrapOpenAI(client)` | `neatlogs` or `neatlogs/openai` |
+| `@anthropic-ai/sdk` | `wrapAnthropic(client)` | `neatlogs` or `neatlogs/anthropic` |
+| Azure OpenAI | `wrapAzureOpenAI(client)` | `neatlogs/azure-openai` |
+| `@aws-sdk/client-bedrock-runtime` | `wrapBedrock(client)` | `neatlogs/bedrock` |
+| `@google/genai` (Gemini / AI Studio, `provider=google`) | `wrapGoogleGenAI(client)`, `wrapGoogleGenAIChat(chat)` | `neatlogs/google-genai` |
+| `@google/genai` in Vertex mode (`provider=vertex_ai`) | `wrapVertexAI(client)`, `wrapVertexAIChat(chat)` | `neatlogs/vertex-ai` |
+| OpenRouter | `wrapOpenRouterAgent(client)`, `wrapCallModel(fn)` | `neatlogs/openrouter-agent` |
+| Vercel AI SDK (`ai`) | `wrapAISDK(ai)` | `neatlogs/ai` |
+| Mastra | `wrapMastra(entity)`, `wrapMastraRerank(fn)` | `neatlogs/mastra` |
+| `@anthropic-ai/claude-agent-sdk` | `wrapClaudeAgentSDK(sdk)` | `neatlogs/claude-agent-sdk` |
+| `@langchain/core` (covers LangGraph) | `langchainHandler()` → `config.callbacks` | `neatlogs` or `neatlogs/langchain` |
+| OpenAI Agents SDK | `openaiAgentsProcessor()` → `addTraceProcessor()` | `neatlogs` |
+| Strands / Pi agents | `strandsHooks(agent)` / `piAgentHooks(agent)` | `neatlogs` |
+| OpenCode | `NeatlogsOpencodePlugin` | `neatlogs/opencode` |
 
-> **Explicit client wrappers** (alternative to the instrumentation key, mirroring Python's `neatlogs.wrap()`): `wrapGoogleGenAI` from `neatlogs/google-genai` (Gemini / AI Studio, `provider=google`) and `wrapVertexAI` from `neatlogs/vertex-ai` (Vertex mode, `provider=vertex_ai`) for `@google/genai` clients. Use the wrapper OR the `google_genai` instrumentation key — not both.
+The direct provider wrappers (`wrapOpenAI`, `wrapAnthropic`, `wrapAzureOpenAI`, `wrapBedrock`, `wrapGoogleGenAI`, `wrapVertexAI`, `wrapOpenRouterAgent`) also **auto-open a `WORKFLOW` root** when a call would otherwise be parentless, so a lone wrapped call renders on its own. Framework helpers root themselves.
 
-### Registered but Not Instrumentable (TS SDK v1)
+### Why the instrumentations key throws
 
-These are in the registry but have `null` instrumentation fields — they cannot be auto-instrumented in the current TypeScript SDK version:
+`init()` validates the list against the registry and rejects any key that loads an auto-instrumentor, because OpenInference/OTel-contrib instrumentors create *and* activate spans on the **global** OTel context — a private provider can't isolate that in either direction. The error names the replacement:
 
-`litellm`, `crewai`
+```
+The "openai" auto-instrumentation uses the global OpenTelemetry context and cannot
+guarantee isolation from other tracing SDKs (Datadog, etc.).
 
-> **HTTP auto-instrumentation** (fetch/undici) is always enabled by `init()` for trace context propagation — you do not need to list it in `instrumentations`.
+Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing. Neatlogs does not
+support shared global-context instrumentation.
+```
+
+Keys that load nothing (`crewai`, `litellm`, `cohere`, `groq`, `llamaindex`, and the vector-DB keys) are accepted but are **no-ops** — they patch nothing. Don't pass them either; they achieve nothing.
+
+> This is the opposite of the **Python** SDK, where `instrumentations=[...]` is the primary path. Do not port a Python snippet's `instrumentations` list into TypeScript.
+
+> **HTTP auto-instrumentation** (fetch/undici) is always enabled by `init()` for trace context propagation — nothing to configure.
 
 ---
 

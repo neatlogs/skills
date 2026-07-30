@@ -26,7 +26,9 @@ WORKFLOW  crew.kickoff()
 
 Covered entrypoints: `kickoff` / `kickoff_async` / `akickoff` / `kickoff_for_each` / `kickoff_for_each_async` / `akickoff_for_each`, plus `train` / `test` / `replay`. Flows: `flow.kickoff` / `kickoff_async` / `akickoff`.
 
-**No `instrumentations=` and no provider pairing.** Older guidance paired `"crewai"` with a provider instrumentor (`"openai"`, `"anthropic"`, …) to get LLM spans. `wrap()` patches `LLM.call` directly, so it captures LLM spans regardless of the model backend — you do NOT pass `instrumentations=[...]` and do NOT need to match a provider to the model string.
+**No provider pairing.** Older guidance paired `"crewai"` with a provider instrumentor (`"openai"`, `"anthropic"`, …) to get LLM spans. Neatlogs patches `LLM.call` directly, so LLM spans are captured regardless of the model backend — never match a provider key to the model string.
+
+**`wrap()` vs `instrumentations=["crewai"]`.** Both install the SAME class-level hooks (`Crew.kickoff`, `Task`, `Agent`, `BaseTool.run`, `LLM.call`), so either one gives a bare crew a full tree. Prefer `wrap(crew)` — it additionally binds workflow metadata and is required for **Flows** and **standalone Agents**, which are routed per instance and NOT covered by the key alone. Passing the key is not an error.
 
 `wrap()` also auto-suppresses CrewAI's own built-in telemetry (the no-I/O `Crew Created` / `Task Created` / `Flow Creation` lifecycle spans), so those don't pollute your traces.
 
@@ -68,7 +70,7 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 
 - `neatlogs.init()` MUST execute BEFORE any crewai / LLM library imports.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
-- Do NOT pass `instrumentations=[...]` to `init()` for CrewAI — `wrap(crew)` captures agents/tasks/tools/LLM.
+- Instrument via `wrap(crew)`, not `instrumentations=[...]` — it captures agents/tasks/tools/LLM AND binds workflow metadata, and it is the only path that covers Flows / standalone Agents. (`instrumentations=["crewai"]` is a valid key that installs the same class hooks; if a project already has it, leave it — just add the `wrap()`.)
 - Wrap the Crew/Flow instance: `crew = neatlogs.wrap(crew)`. Returns the same instance.
 - Never hardcode API keys in source. Use `os.getenv()`.
 - Add imports ONLY for what a file uses:

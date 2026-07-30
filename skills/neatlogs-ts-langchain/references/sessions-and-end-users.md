@@ -10,7 +10,7 @@ noise.
 ## The model
 
 - **One turn = one trace.** Each `.invoke(...)` produces its own trace
-  (LangChain self-roots — `instrumentations: ['langchain']` traces it).
+  (the `langchainHandler()` self-roots).
 - **A session groups turns.** Reuse the SAME `sessionId` across every turn of a
   conversation and the backend rolls them up into one session.
 - **End-user is per session.** `endUserId` (+ optional `endUserMetadata`)
@@ -28,16 +28,15 @@ LangChain self-instruments and opens its own trace root, so there is no manual
 in the enclosing `identify()` scope.
 
 ```typescript
-import { init, identify } from 'neatlogs';
+import { init, identify, langchainHandler } from 'neatlogs';
+import { ChatOpenAI } from '@langchain/openai';
 
-// instrumentations: ['langchain'] must run BEFORE importing @langchain/*
 await init({
   apiKey: process.env.NEATLOGS_API_KEY,
   workflowName: 'support-bot',
-  instrumentations: ['langchain'],
 });
 
-const { ChatOpenAI } = await import('@langchain/openai');
+const handler = langchainHandler();
 const llm = new ChatOpenAI({ model: 'gpt-4o' });
 
 // One conversation = one sessionId, reused across every turn.
@@ -46,12 +45,12 @@ const identity = { sessionId, endUserId: 'u_456', endUserMetadata: { plan: 'pro'
 
 // Turn 1
 await identify(identity, async () => {
-  await llm.invoke('How do I reset my password?');
+  await llm.invoke('How do I reset my password?', { callbacks: [handler] });
 });
 
 // Turn 2 — SAME sessionId + endUserId groups it into the same session.
 await identify(identity, async () => {
-  await llm.invoke('And how do I enable 2FA?');
+  await llm.invoke('And how do I enable 2FA?', { callbacks: [handler] });
 });
 ```
 

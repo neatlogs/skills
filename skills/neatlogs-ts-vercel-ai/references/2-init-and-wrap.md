@@ -4,18 +4,19 @@ Two pieces: init first (registers the tracer), then wrap the `ai` module and use
 
 ```typescript
 import "dotenv/config";
+import * as ai from "ai";
+import { openai } from "@ai-sdk/openai";
 import { init } from "neatlogs";
 import { wrapAISDK } from "neatlogs/ai";
 
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? "",
   workflowName: "ai-sdk-app",
-  // NOTE: no instrumentations: ['ai_sdk'] — the wrapper does the instrumentation.
+  // NOTE: no instrumentations key — init() THROWS for 'ai_sdk'. The wrapper is the instrumentation.
 });
 
-// Import the ai module + provider, then wrap.
-const ai = await import("ai");
-const { openai } = await import("@ai-sdk/openai");
+// wrapAISDK takes the ai module namespace and returns wrapped functions.
+// Plain static imports are correct — there is no import-order rule.
 const { generateText, streamText, generateObject, streamObject, embed, embedMany, rerank } = wrapAISDK(ai);
 
 // Use the WRAPPED functions exactly like the originals.
@@ -41,7 +42,7 @@ import { generateText } from "ai";
 const { text } = await generateText({ model, prompt });
 
 // ✅ AFTER — wrapped, traced
-const ai = await import("ai");
+import * as ai from "ai";
 const { generateText } = wrapAISDK(ai);
 const { text } = await generateText({ model, prompt });
 ```
@@ -55,5 +56,5 @@ await generateText({ model, prompt, experimental_telemetry: createAITelemetry({ 
 
 ## Verify
 1. `await init(...)` runs before `wrapAISDK`.
-2. NO `instrumentations: ['ai_sdk']` in init (it's a no-op).
+2. NO `instrumentations` key in init at all — `init()` throws for `'ai_sdk'`.
 3. The AI SDK functions actually CALLED are the ones from `wrapAISDK(ai)`, not bare `import ... from 'ai'`.

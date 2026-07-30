@@ -185,16 +185,15 @@ const processLargeFile = span(
 ### Complete Multi-Agent Example
 
 ```typescript
-import { init, span, flush, shutdown } from 'neatlogs';
+import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: '...',
   workflowName: 'research-app',
-  instrumentations: ['openai'],
 });
 
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());
 
 const webSearch = span(
   { kind: 'TOOL', toolName: 'web_search' },
@@ -382,16 +381,15 @@ log('Retrieved {count} documents', { count: 5 });
 The most common pattern: use `span()` for orchestration and `trace()` inside for prompt tracking.
 
 ```typescript
-import { init, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapOpenAI, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: '...',
   workflowName: 'research',
-  instrumentations: ['openai'],
 });
 
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());
 
 const sysTpl = new PromptTemplate('You are a {{role}} assistant. Always be thorough.');
 const userTpl = new UserPromptTemplate('Research: {{query}}');

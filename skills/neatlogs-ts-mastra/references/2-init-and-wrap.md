@@ -10,14 +10,15 @@ import { wrapMastra } from "neatlogs/mastra";
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? "",
   workflowName: "my-mastra-app",
-  // instrumentations is OPTIONAL for a pure-Mastra app — wrapMastra captures
-  // everything on its own. Only add a provider here if you ALSO call a provider
-  // SDK directly outside Mastra. (See "Works with any provider" below.)
+  // NO instrumentations key — init() THROWS for "mastra" and for every provider
+  // key. wrapMastra captures everything on its own. (See "Works with any
+  // provider" below.)
 });
 
-// Dynamic imports AFTER init so modules are patched at load time.
-const { projectManagerAgent } = await import("./agents/index.js");
-const { sprintPlanningWorkflow } = await import("./workflows/index.js");
+// Plain static imports are fine — wrapMastra patches the INSTANCE you pass, not
+// the module, so there is no import-order rule.
+import { projectManagerAgent } from "./agents/index.js";
+import { sprintPlanningWorkflow } from "./workflows/index.js";
 
 // Wrap each entity. wrapMastra patches in place AND returns it — use the result.
 const agent = wrapMastra(projectManagerAgent);
@@ -46,8 +47,8 @@ AGENT  mastra.agent.<name>
 ## Other entities
 
 ```typescript
-const { InMemoryVector } = await import("./vector/index.js");
-const { rerank } = await import("@mastra/rag");
+import { InMemoryVector } from "./vector/index.js";
+import { rerank } from "@mastra/rag";
 import { wrapMastra, wrapMastraRerank } from "neatlogs/mastra";
 
 const vector = wrapMastra(new InMemoryVector());   // query → RETRIEVER, upsert → VECTOR_STORE
@@ -63,7 +64,7 @@ const ranked = await tracedRerank(results, query, model, { topK: 5 });
 If the app uses a root `Mastra`, wrap it once — the returned proxy auto-wraps every agent/workflow it hands out:
 
 ```typescript
-const { Mastra } = await import("@mastra/core");
+import { Mastra } from "@mastra/core";
 const mastra = wrapMastra(new Mastra({ agents: { projectManagerAgent }, workflows: { sprintPlanningWorkflow } }));
 const agent = mastra.getAgent("projectManagerAgent"); // already traced
 ```
@@ -72,28 +73,28 @@ const agent = mastra.getAgent("projectManagerAgent"); // already traced
 
 `wrapMastra` is provider-agnostic. It hooks the agent's resolved model at the Mastra router level (`doGenerate`/`doStream` on the AI SDK V2 interface), which is identical across providers — so the LLM span (model name, prompt/completion tokens, stop reason, output, tool_calls) is captured the same way regardless of which model the agent uses.
 
-**You do NOT wrap the provider separately.** A Mastra agent routes its provider call through the model router, not the bare provider SDK, so `wrapMastra(agent)` is the sole capture point — there is no `wrapOpenAI`/`wrapAnthropic` step, and naming the provider in `instrumentations` does NOT produce duplicate LLM spans. (The provider entry only matters if the same app ALSO calls a provider SDK directly, outside Mastra.)
+**You do NOT wrap the provider separately.** A Mastra agent routes its provider call through the model router, not the bare provider SDK, so `wrapMastra(agent)` is the sole capture point — there is no `wrapOpenAI`/`wrapAnthropic` step for Mastra-routed calls.
 
-Each provider just needs its API key in `.env` and the matching Mastra model string — no `instrumentations` entry and no provider wrapper required:
+Each provider just needs its API key in `.env` and the matching Mastra model string:
 
-| Mastra model string | API key env var | `instrumentations` entry |
-|---------------------|-----------------|--------------------------|
-| `openai/gpt-4o-mini` | `OPENAI_API_KEY` | not needed (optional `"openai"`) |
-| `anthropic/claude-haiku-4-5` | `ANTHROPIC_API_KEY` | not needed (optional `"anthropic"`) |
-| `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` (and/or `GOOGLE_API_KEY`) | not needed (optional `"google_genai"`) |
-| `bedrock/...` | AWS credentials | not needed (optional `"bedrock"`) |
+| Mastra model string | API key env var |
+|---------------------|-----------------|
+| `openai/gpt-4o-mini` | `OPENAI_API_KEY` |
+| `anthropic/claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
+| `google/gemini-2.5-flash` | `GOOGLE_GENERATIVE_AI_API_KEY` (and/or `GOOGLE_API_KEY`) |
+| `bedrock/...` | AWS credentials |
 
 ```typescript
-// Anthropic — no instrumentations needed
+// Anthropic
 await init({ apiKey: process.env.NEATLOGS_API_KEY, workflowName: "my-app" });
 const agent = wrapMastra(new Agent({ id: "pm", name: "PM", instructions: "...", model: "anthropic/claude-haiku-4-5" }));
 
-// Google — no instrumentations needed
+// Google
 await init({ apiKey: process.env.NEATLOGS_API_KEY, workflowName: "my-app" });
 const agent = wrapMastra(new Agent({ id: "pm", name: "PM", instructions: "...", model: "google/gemini-2.5-flash" }));
 ```
 
-The `instrumentations` entry is only for provider SDKs called DIRECTLY outside Mastra. If the app does that for several providers, list them all, e.g. `instrumentations: ["openai", "anthropic"]`.
+If the same app ALSO calls a provider SDK **directly** outside Mastra, instrument that client with its own explicit helper — `const client = wrapOpenAI(new OpenAI())` — NOT with an `instrumentations` key, which `init()` rejects.
 
 ## Tool signature (Mastra 1.x)
 
@@ -108,7 +109,7 @@ createTool({ id: "search", execute: async ({ context }) => ({ hits: search(conte
 ```
 
 ## Verify
-1. `await init(...)` runs before the dynamic `import()` of `@mastra/core`.
-2. Each provider used by an agent has its API key in `.env` (no `instrumentations` entry required for Mastra-routed calls).
+1. `await init(...)` runs once at startup, with NO `instrumentations` key (it throws).
+2. Each provider used by an agent has its API key in `.env`.
 3. Every entity you care about is passed through `wrapMastra()` and the RETURNED reference is the one called.
 4. Tools use the 1.x `(inputData)` execute signature.

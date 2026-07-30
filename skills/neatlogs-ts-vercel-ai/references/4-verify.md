@@ -10,7 +10,8 @@ import { generateText } from "ai";
 await generateText({ model, prompt });
 
 // ✅ RIGHT — calling the wrapped function.
-const { generateText } = wrapAISDK(await import("ai"));
+import * as ai from "ai";
+const { generateText } = wrapAISDK(ai);
 await generateText({ model, prompt });
 ```
 
@@ -29,4 +30,4 @@ await generateText({ model, prompt });
 ## Verify
 - [ ] Every AI SDK call site uses a `wrapAISDK(ai)` function (no bare `ai` imports being called).
 - [ ] No `span()`/`trace()` around an individual wrapped call.
-- [ ] `init()` has no `instrumentations: ['ai_sdk']`.
+- [ ] `init()` has no `instrumentations` key at all (it throws for `'ai_sdk'`).

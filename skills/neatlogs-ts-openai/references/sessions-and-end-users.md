@@ -20,14 +20,14 @@ Without this, traces are anonymous. With it you get customer-level analytics:
 
 ## Wrapper-only: `identify()` per turn
 
-When the project only uses auto-instrumentation (`wrapOpenAI` / `instrumentations: ['openai']`) with no manual root, wrap each turn in `identify()`. The wrapped call's auto-root inherits the session + end-user:
+When the project only uses a provider wrapper (`wrapOpenAI`, `wrapAnthropic`, …) with no manual root, wrap each turn in `identify()`. The wrapper's auto-root inherits the session + end-user:
 
 ```typescript
-import { init, identify } from 'neatlogs';
+import { init, identify, wrapOpenAI } from 'neatlogs';
+import { OpenAI } from 'openai';
 
-await init({ apiKey: '...', workflowName: 'support-bot', instrumentations: ['openai'] });
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+await init({ apiKey: '...', workflowName: 'support-bot' });
+const client = wrapOpenAI(new OpenAI());
 
 // A multi-turn chat: same sessionId + endUserId on every turn groups them.
 async function chatTurn(conversationId: string, userId: string, message: string) {

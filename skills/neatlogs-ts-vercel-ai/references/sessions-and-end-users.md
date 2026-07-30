@@ -35,13 +35,13 @@ Same `sessionId` + `endUserId` on every turn → one session grouped under one e
 
 ```typescript
 import "dotenv/config";
+import * as ai from "ai";
+import { openai } from "@ai-sdk/openai";
 import { init, identify } from "neatlogs";
 import { wrapAISDK } from "neatlogs/ai";
 
 await init({ apiKey: process.env.NEATLOGS_API_KEY ?? "", workflowName: "support-bot" });
 
-const ai = await import("ai");
-const { openai } = await import("@ai-sdk/openai");
 const { generateText } = wrapAISDK(ai);
 
 // One live conversation with a specific customer.

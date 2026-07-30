@@ -11,12 +11,9 @@ metadata:
 
 # Neatlogs TypeScript Setup — LangChain / LangGraph
 
-This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). Neatlogs offers **two ways** to instrument it:
+This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). Neatlogs instruments it with **`langchainHandler()`** — a LangChain callback handler you attach via `{ callbacks: [handler] }`. This is the **only** supported path.
 
-1. **`langchainHandler()`** — a LangChain callback handler you attach per call via `{ callbacks: [handler] }`. This is the **recommended, first-class** path. This skill uses it throughout.
-2. **`instrumentations: ['langchain']`** on `init()` — zero-touch auto-instrumentation that patches at import time. Use it when you can't thread a handler through your code.
-
-Pick ONE — don't combine them (that double-traces). The rest of this skill shows the handler approach.
+> **`init({ instrumentations: ['langchain'] })` throws.** The OpenInference LangChain instrumentor creates and activates spans on the **global** OpenTelemetry context, which Neatlogs' private provider cannot isolate from a co-tenant tracer (Datadog, etc.), so `init()` rejects the key outright with a message pointing at `langchainHandler()`. Older guidance offered it as a zero-touch alternative — that is gone.
 
 ## Core mechanism — `langchainHandler()`
 
@@ -24,15 +21,17 @@ Create ONE handler and pass it via `{ callbacks: [handler] }` on the calls you w
 
 ```typescript
 import { init, langchainHandler, span, flush, shutdown } from 'neatlogs';
+import { ChatOpenAI } from '@langchain/openai';
 
 await init({ apiKey: process.env.NEATLOGS_API_KEY, workflowName: 'langchain-app' });
 
-const { ChatOpenAI } = await import('@langchain/openai');
 const llm = new ChatOpenAI({ model: 'gpt-4o' });
 
 const handler = langchainHandler();
 const res = await llm.invoke('Hello', { callbacks: [handler] });
 ```
+
+The handler is bound to Neatlogs' private provider, so import order doesn't matter — a static `import` of `@langchain/*` above `init()` is fine.
 
 ### LangGraph: attach at the GRAPH invocation — NOT the per-node model call
 
@@ -67,8 +66,8 @@ await app.invoke(state, { callbacks: [handler] });               // graph level 
 
 ## Rules (apply to ALL steps)
 
-- `await init(...)` MUST run BEFORE any `@langchain/*` import. Use dynamic `import()` AFTER init.
-- This skill uses the **callback handler**; do NOT ALSO pass `instrumentations: ['langchain']` to `init()` — running both double-traces.
+- `await init(...)` runs once at startup. Import order does NOT matter — the handler binds to Neatlogs' private provider per call, so a static `import` of `@langchain/*` is fine (no dynamic `import()` needed).
+- NEVER pass `instrumentations: ['langchain']` to `init()` — it **throws**. The callback handler is the only path.
 - Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For plain LangChain (LCEL chains / bare model calls) attach per model/chain call. For LangGraph attach at the graph invocation (`app.invoke(..., { callbacks: [handler] })`), NOT the per-node `llm.invoke()`.
 - The ONLY manual span you add is `span({ kind:'WORKFLOW' })` on the user-facing entry that runs the chain/graph/agent.
 - NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced by the handler; manual wrapping duplicates.

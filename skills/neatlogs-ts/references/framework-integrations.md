@@ -1,28 +1,37 @@
 # Framework Integrations — NeatLogs TypeScript SDK Reference
 
-Framework-specific integration patterns for the NeatLogs TypeScript SDK. Covers auto-instrumentation setup, init ordering, and representative code examples for each supported LLM provider and agent framework.
+Framework-specific integration patterns for the NeatLogs TypeScript SDK. Covers the wrapper for each supported LLM provider and agent framework, plus representative code examples.
+
+> **`init({ instrumentations: [...] })` THROWS for every provider/framework key.** Instrumentation is always an explicit helper applied to the object — see [Supported Instrumentations](../SKILL.md#supported-instrumentations). Because helpers patch the **instance**, not the module, import order never matters.
 
 ---
 
 ## 1. Integration Approaches (Decision Tree)
 
-### 1a. Pure Auto-Instrumentation
+### 1a. Wrapper Only
 
-For applications that call LLM providers directly. Add the provider to `instrumentations`. No manual wrapping needed for LLM calls.
+For applications that call LLM providers directly. Wrap the client; its calls are traced and a `WORKFLOW` root opens automatically.
 
 ```typescript
-import { init } from 'neatlogs';
-await init({ instrumentations: ['openai'] });
+import { init, wrapOpenAI } from 'neatlogs';
+import { OpenAI } from 'openai';
+
+await init({ apiKey: process.env.NEATLOGS_API_KEY });
+const client = wrapOpenAI(new OpenAI());
 ```
 
-### 1b. Auto-Instrumentation + `span()` Wrappers
+### 1b. Wrapper + `span()` Wrappers
 
-For custom multi-agent orchestration. Add providers to `instrumentations` for LLM call tracing, then use `span()` on your orchestration functions.
+For custom multi-agent orchestration. Wrap each provider client, then use `span()` on your orchestration functions so everything nests under one root.
 
 ```typescript
-import { init, span } from 'neatlogs';
+import { init, wrapOpenAI, wrapAnthropic, span } from 'neatlogs';
+import { OpenAI } from 'openai';
+import { Anthropic } from '@anthropic-ai/sdk';
 
-await init({ instrumentations: ['openai', 'anthropic'] });
+await init({ apiKey: process.env.NEATLOGS_API_KEY });
+const openaiClient = wrapOpenAI(new OpenAI());
+const anthropicClient = wrapAnthropic(new Anthropic());
 
 const pipeline = span({ kind: 'WORKFLOW' }, async (query: string) => {
   const resultA = await agentA(query);
@@ -31,14 +40,14 @@ const pipeline = span({ kind: 'WORKFLOW' }, async (query: string) => {
 });
 ```
 
-### 1c. Auto-Instrumentation + `trace()` + `PromptTemplate`
+### 1c. Wrapper + `trace()` + `PromptTemplate`
 
 For tracking prompt templates and variables in the dashboard. Wrap LLM calls in `trace()` and pass `PromptTemplate` instances.
 
 ```typescript
 import { init, trace, PromptTemplate, UserPromptTemplate } from 'neatlogs';
 
-await init({ instrumentations: ['openai'] });
+await init({ apiKey: process.env.NEATLOGS_API_KEY });
 
 const sysTpl = new PromptTemplate('You are a {{role}} assistant.');
 const userTpl = new UserPromptTemplate('{{query}}');
@@ -64,22 +73,21 @@ await trace(
 
 ## 2. OpenAI
 
-- **Instrumentation key**: `instrumentations: ['openai']`
-- **Package**: `@arizeai/openinference-instrumentation-openai`
-- **Import order critical**: `await init()` BEFORE `import('openai')`
-- **Supports**: Sync, async, streaming
+- **Wrapper**: `wrapOpenAI(client)` from `neatlogs` (or `neatlogs/openai`)
+- **Import order**: irrelevant — the wrapper patches the instance
+- **Supports**: sync, async (`AsyncOpenAI`-style usage), streaming
+- **Auto-roots**: yes — a lone wrapped call opens its own `WORKFLOW` root
 
 ```typescript
-import { init, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapOpenAI, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: '...',
   workflowName: 'my-app',
-  instrumentations: ['openai'],
 });
 
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());
 
 const sysTpl = new PromptTemplate('You are a helpful assistant specializing in {{domain}}.');
 const userTpl = new UserPromptTemplate('Question: {{query}}');
@@ -111,21 +119,20 @@ await shutdown();
 
 ## 3. Anthropic
 
-- **Instrumentation key**: `instrumentations: ['anthropic']`
-- **Package**: `@arizeai/openinference-instrumentation-anthropic`
-- **Supports**: Extended thinking, streaming, tool use
+- **Wrapper**: `wrapAnthropic(client)` from `neatlogs` (or `neatlogs/anthropic`)
+- **Supports**: extended thinking, streaming, tool use
+- **Auto-roots**: yes
 
 ```typescript
-import { init, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapAnthropic, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { Anthropic } from '@anthropic-ai/sdk';
 
 await init({
   apiKey: '...',
   workflowName: 'anthropic-app',
-  instrumentations: ['anthropic'],
 });
 
-const { Anthropic } = await import('@anthropic-ai/sdk');
-const client = new Anthropic();
+const client = wrapAnthropic(new Anthropic());
 
 const sysTpl = new PromptTemplate('You are a market analysis expert for {{industry}}.');
 const userTpl = new UserPromptTemplate('Analyze: {{query}}');
@@ -159,24 +166,26 @@ await shutdown();
 
 ## 4. LangChain
 
-- **Instrumentation key**: `instrumentations: ['langchain']`
-- **Package**: `@arizeai/openinference-instrumentation-langchain`
-- **Auto-instruments**: LLM calls, chains, agents, tools, retrievers
+- **Helper**: `langchainHandler()` from `neatlogs` (or `neatlogs/langchain`)
+- **Captures**: LLM calls, chains, agents, tools, retrievers
+- **Auto-roots**: yes — the handler opens a root per run
+
+Pass the handler in `config.callbacks` at the **model/chain level** (inside your nodes), not on `graph.invoke()`:
 
 ```typescript
-import { init, span, flush, shutdown } from 'neatlogs';
+import { init, langchainHandler, span, flush, shutdown } from 'neatlogs';
+import { ChatOpenAI } from '@langchain/openai';
 
 await init({
   apiKey: '...',
   workflowName: 'langchain-app',
-  instrumentations: ['langchain'],
 });
 
-const { ChatOpenAI } = await import('@langchain/openai');
+const handler = langchainHandler();
 const llm = new ChatOpenAI({ model: 'gpt-4o' });
 
 const runAgent = span({ kind: 'WORKFLOW' }, async (query: string) => {
-  const response = await llm.invoke(query);
+  const response = await llm.invoke(query, { callbacks: [handler] });
   return response.content;
 });
 
@@ -185,26 +194,30 @@ await flush();
 await shutdown();
 ```
 
+For LangGraph specifics, use the dedicated `neatlogs-ts-langchain` skill.
+
 ---
 
 ## 5. AWS Bedrock
 
-- **Instrumentation key**: `instrumentations: ['bedrock']`
-- **Package**: `@arizeai/openinference-instrumentation-bedrock`
+- **Wrapper**: `wrapBedrock(client)` from `neatlogs/bedrock`
+- **Covers**: `ConverseCommand`, `ConverseStreamCommand`, `InvokeModelCommand` (patches `client.send`)
+- **Auto-roots**: yes
 
 ```typescript
 import { init, span, flush, shutdown } from 'neatlogs';
+import { wrapBedrock } from 'neatlogs/bedrock';
+import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 
 await init({
   apiKey: '...',
   workflowName: 'bedrock-app',
-  instrumentations: ['bedrock'],
 });
 
+const bedrockClient = wrapBedrock(new BedrockRuntimeClient({ region: 'us-east-1' }));
+
 const run = span({ kind: 'WORKFLOW' }, async (prompt: string) => {
-  // Bedrock calls are auto-instrumented
-  const response = await bedrockClient.invokeModel({ /* ... */ });
-  return response;
+  return await bedrockClient.send(new ConverseCommand({ /* ... */ }));
 });
 
 await run('Hello');
@@ -216,8 +229,7 @@ await shutdown();
 
 ## 6. MCP (Model Context Protocol)
 
-- **Instrumentation key**: `instrumentations: ['mcp']`
-- **Package**: `@arizeai/openinference-instrumentation-mcp`
+- **No auto-instrumentor** — `instrumentations: ['mcp']` throws. Instrument MCP tools yourself with `span({ kind: 'MCP_TOOL' })`.
 
 ```typescript
 import { init, span, flush, shutdown } from 'neatlogs';
@@ -225,11 +237,9 @@ import { init, span, flush, shutdown } from 'neatlogs';
 await init({
   apiKey: '...',
   workflowName: 'mcp-app',
-  instrumentations: ['mcp'],
 });
 
-// MCP tool spans are auto-instrumented
-// For custom MCP tools, use span() with kind: 'MCP_TOOL':
+// Give each MCP tool handler an MCP_TOOL span:
 const getWeather = span(
   { kind: 'MCP_TOOL', toolName: 'get_weather', toolJsonSchema: { type: 'object', properties: { location: { type: 'string' } } } },
   async (location: string) => {
@@ -242,20 +252,25 @@ const getWeather = span(
 
 ## 7. Claude Agent SDK
 
-- **Instrumentation key**: `instrumentations: ['claude_agent_sdk']`
-- **Package**: `@arizeai/openinference-instrumentation-claude-agent-sdk`
+- **Wrapper**: `wrapClaudeAgentSDK(sdk)` from `neatlogs/claude-agent-sdk`
+- **Wraps** the module's `query`; every other export (`createSdkMcpServer`, `tool`, …) passes through unchanged
 
 ```typescript
 import { init, flush, shutdown } from 'neatlogs';
+import { wrapClaudeAgentSDK } from 'neatlogs/claude-agent-sdk';
+import * as claudeSdk from '@anthropic-ai/claude-agent-sdk';
 
 await init({
   apiKey: '...',
   workflowName: 'claude-agent-app',
-  instrumentations: ['claude_agent_sdk'],
 });
 
-// Claude Agent SDK calls are auto-instrumented
-// ... your Claude Agent SDK code ...
+// Use the wrapped module's query() — the raw import is NOT traced.
+const { query } = wrapClaudeAgentSDK(claudeSdk);
+
+for await (const message of query({ prompt: 'Summarize this repo' })) {
+  // ...
+}
 
 await flush();
 await shutdown();
@@ -265,20 +280,22 @@ await shutdown();
 
 ## 8. BeeAI
 
-- **Instrumentation key**: `instrumentations: ['beeai']`
-- **Package**: `@arizeai/openinference-instrumentation-beeai`
+- **No auto-instrumentor** — `instrumentations: ['beeai']` throws. Instrument your BeeAI agent/tool functions with `span()` (`kind: 'AGENT'` / `'TOOL'`), and the underlying provider client with its own wrapper.
 
 ```typescript
-import { init, flush, shutdown } from 'neatlogs';
+import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: '...',
   workflowName: 'beeai-app',
-  instrumentations: ['beeai'],
 });
 
-// BeeAI agent calls are auto-instrumented
-// ... your BeeAI code ...
+const client = wrapOpenAI(new OpenAI());
+
+const runAgent = span({ kind: 'AGENT', name: 'bee_agent' }, async (task: string) => {
+  // ... your BeeAI code, using the wrapped client ...
+});
 
 await flush();
 await shutdown();
@@ -295,11 +312,10 @@ Wrap each Mastra entity with `wrapMastra` — it patches Agent/Workflow/Vector/M
 ```typescript
 import { init } from 'neatlogs';
 import { wrapMastra } from 'neatlogs/mastra';
+import { Agent } from '@mastra/core/agent';
+import { openai } from '@ai-sdk/openai';
 
 await init({ apiKey: '...', workflowName: 'mastra-app' });
-
-const { Agent } = await import('@mastra/core/agent');
-const { openai } = await import('@ai-sdk/openai');
 
 const agent = wrapMastra(
   new Agent({ name: 'assistant', instructions: 'Be concise.', model: openai('gpt-4o') }),
@@ -385,7 +401,7 @@ The Vercel AI SDK emits its own `ai.*` namespace; the SDK's `UnifiedAttributePro
 
 ### Note on `init({ instrumentations: ['ai_sdk'] })`
 
-`ai_sdk` exists in the instrumentation registry for scope-detection consistency, but passing it to `init()` is a **no-op**. The wrapper is always opt-in per call site via `wrapAISDK(ai)` — listing it in `instrumentations` does nothing useful and is not required.
+`ai_sdk` exists in the instrumentation registry for scope-detection consistency, but passing it to `init()` **throws** (its registry entry names an instrumentor module, so the isolation gate rejects it). `wrapAISDK(ai)` is the only path.
 
 ---
 
@@ -394,17 +410,16 @@ The Vercel AI SDK emits its own `ai.*` namespace; the SDK's `UnifiedAttributePro
 For server applications, `init()` is called **once at startup**. Do NOT call `flush()` or `shutdown()` on every request.
 
 ```typescript
-import { init, span, flush, shutdown } from 'neatlogs';
+import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
+import { OpenAI } from 'openai';
 import express from 'express';
 
 await init({
   apiKey: '...',
   workflowName: 'my-api',
-  instrumentations: ['openai'],
 });
 
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());
 
 const app = express();
 

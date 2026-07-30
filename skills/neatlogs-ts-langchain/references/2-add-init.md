@@ -1,10 +1,11 @@
-# Step 2: Add init() — BEFORE the LangChain import
+# Step 2: Add init() and create the handler
 
-`await init()` MUST run before any `@langchain/*` module is imported. Convert LangChain imports to dynamic `import()` AFTER init. Then create the callback handler.
+Call `await init()` once at startup, then create the callback handler. LangChain imports can stay as plain static `import` statements — the handler binds to Neatlogs' private provider on each call, so there is no import-order rule.
 
 ```typescript
 import "dotenv/config";
 import { init, langchainHandler } from "neatlogs";
+import { ChatOpenAI } from "@langchain/openai";
 
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? "",
@@ -12,40 +13,24 @@ await init({
 });
 
 const handler = langchainHandler();
-
-// LangChain modules imported AFTER init (dynamic).
-const { ChatOpenAI } = await import("@langchain/openai");
 const llm = new ChatOpenAI({ model: "gpt-4o" });
 ```
 
-## WRONG vs RIGHT
 
+## Do NOT pass instrumentations — it throws
 ```typescript
-// ❌ WRONG — static @langchain import before init.
-import { ChatOpenAI } from "@langchain/openai";
-await init({ ... });
-
-// ✅ RIGHT — init first, dynamic import after.
-await init({ ... });
-const { ChatOpenAI } = await import("@langchain/openai");
-```
-
-## Do NOT pass endpoint= in code
-Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
-
-## Do NOT combine handler + instrumentations
-```typescript
-// ❌ WRONG — double-traces.
+// ❌ WRONG — init() THROWS:
+//   The "langchain" auto-instrumentation uses the global OpenTelemetry context and
+//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
+//   Use langchainHandler() from 'neatlogs/langchain' for isolated tracing.
 await init({ instrumentations: ["langchain"] });
-const handler = langchainHandler();  // both active = duplicates
 
-// ✅ RIGHT — pick ONE.
-await init({ ... });
+// ✅ RIGHT — handler only.
+await init({ apiKey: process.env.NEATLOGS_API_KEY ?? "" });
 const handler = langchainHandler();
 ```
 
 ## Verify
-1. `await init(...)` runs before any `@langchain/*` import.
-2. LangChain modules use `await import(...)` after init.
-3. `langchainHandler()` created ONCE, reused across calls.
-4. No `instrumentations: ['langchain']` in init.
+1. `await init(...)` runs once at startup, before the first traced call.
+2. `langchainHandler()` created ONCE, reused across calls.
+3. No `instrumentations` key in `init()` at all.

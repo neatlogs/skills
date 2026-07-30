@@ -46,10 +46,10 @@ and `endUserId` for every turn of the same conversation:
 ```typescript
 import { init, flush, shutdown, identify } from 'neatlogs';
 import { wrapMastra } from 'neatlogs/mastra';
+import { supportAgent } from './agents/index.js';
 
 await init({ apiKey: process.env.NEATLOGS_API_KEY ?? '', workflowName: 'support-app' });
 
-const { supportAgent } = await import('./agents/index.js');
 const agent = wrapMastra(supportAgent);
 
 // One conversation = one sessionId, one end-user, many turns.

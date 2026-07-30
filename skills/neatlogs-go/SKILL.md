@@ -18,7 +18,7 @@ export nor parent (nor be parented by) a co-tenant tracer like Datadog — and,
 symmetrically, OTel-native frameworks are **not** auto-captured. You instrument
 explicitly: `WrapGenAI()` wraps a `google.golang.org/genai` client, and a small
 set of span helpers cover direct provider calls, retrieval, and boundaries.
-Export is OTLP/HTTP to `{endpoint}/v1/traces`.
+Export is OTLP/HTTP to the managed Neatlogs cloud.
 
 Module: `github.com/neatlogs/neatlogs-go` (requires Go 1.25+). The Gemini wrapper
 lives in a separate module (`contrib/genai`) so its heavy dependency stays out of
@@ -103,7 +103,6 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `APIKey` | `string` | `NEATLOGS_API_KEY` env | Auth key. Empty (after env fallback) → export disabled, spans dropped |
-| `Endpoint` | `string` | `NEATLOGS_ENDPOINT` env, then default | Ingestion base URL (without `/v1/traces`) |
 | `WorkflowName` | `string` | executable name | Labels this service/run |
 | `Tags` | `[]string` | `nil` | Attached to every span as a resource attribute |
 | `Debug` | `bool` | `false` | Verbose diagnostics on stderr |
@@ -111,9 +110,11 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
 
 > Note: `Init` has NO session / end-user field. Those are per-request — see `Identify` (step 6). Config carries no operator id either; identity is set at the trace boundary.
 
+`neatlogs.Version` is exported (const) and stamped on every trace as the `service.version` resource attribute + the instrumentation-scope version — useful when pinning down which SDK build emitted a span.
+
 ## Verify
 
-Run with `Debug: true` and confirm spans export to `{endpoint}/v1/traces`, then
+Run with `Debug: true` and confirm spans export successfully, then
 check the Neatlogs dashboard. For `WrapGenAI`, confirm the `llm` span nests under
 an auto `workflow` root and carries input/output messages + token usage. For the
 explicit helpers, confirm each `StartLLMSpan` / `StartRetrieverSpan` records its

@@ -4,9 +4,9 @@ If this project is a Next.js app, the key Next-specific requirement is initializ
 
 ## 1. `init()` in `instrumentation.ts` via the `register()` hook — use a DYNAMIC import (REQUIRED)
 
-Next.js runs `register()` once at server startup — the right place for `init()`. Guard on the Node.js runtime.
+Next.js runs `register()` once at server startup — the right place for `init()`. Guard on the Node.js runtime. Your route handlers then wrap their provider clients with the matching `wrap*` helper; the LLM SDK imports in those routes can be plain static imports.
 
-**CRITICAL: import `neatlogs` dynamically *inside* `register()`, not at the top of the file.** A static top-level `import { init } from "neatlogs"` makes Next's instrumentation-layer bundler fail with `Can't resolve 'crypto'`, and `serverExternalPackages` does NOT cover the `instrumentation.ts` compilation. A dynamic `await import("neatlogs")` defers resolution to runtime.
+**CRITICAL: import `neatlogs` dynamically *inside* `register()`, not at the top of the file.** A static top-level `import { init } from "neatlogs"` makes Next's instrumentation-layer bundler fail with `Can't resolve 'crypto'`, and `serverExternalPackages` does NOT cover the `instrumentation.ts` compilation. A dynamic `await import("neatlogs")` defers resolution to runtime. (This is a **bundler** constraint, not an instrumentation-ordering one.)
 
 ```typescript
 // src/instrumentation.ts
@@ -17,7 +17,7 @@ export async function register() {
     await init({
       apiKey: process.env.NEATLOGS_API_KEY ?? "",
       workflowName: "my-next-app",
-      instrumentations: ["openai"], // or anthropic / google_genai / bedrock
+      // NO instrumentations key — init() throws for every provider key.
     });
 
     const gracefulShutdown = async () => {
@@ -47,5 +47,6 @@ const nextConfig = { serverExternalPackages: ["neatlogs"] };          // Next 15
 `init()` runs once in `register()`; do NOT flush/shutdown per request. The SIGTERM/SIGINT handlers cover graceful shutdown.
 
 ## Verify
-- [ ] `instrumentation.ts` calls `init()` inside `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via DYNAMIC `await import("neatlogs")` (NOT top-level), with `instrumentations` listing the provider(s). ← the key requirement
+- [ ] `instrumentation.ts` calls `init()` inside `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via DYNAMIC `await import("neatlogs")` (NOT top-level). ← the key requirement
+- [ ] NO `instrumentations` key in that `init()` — it throws. Route handlers wrap their own clients instead (`const client = wrapOpenAI(new OpenAI())`).
 - [ ] Server boots without `Can't resolve 'crypto'`; hitting a route produces spans. (If a route still errors, add `serverExternalPackages` per Step 2.)

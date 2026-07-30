@@ -1,7 +1,6 @@
 # Step 3: Set Environment Variables
 
-1. `set_env_values`: `NEATLOGS_API_KEY`. Do NOT write `NEATLOGS_ENDPOINT` — rely
-   on the SDK's default endpoint.
+1. `set_env_values`: `NEATLOGS_API_KEY`.
 2. Preserve all `.env.example` keys. Hermes routes LLM calls through OpenRouter by
    default, so `OPENROUTER_API_KEY` is typically required to run the agent. `.env`
    is a superset.

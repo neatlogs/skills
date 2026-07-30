@@ -70,16 +70,15 @@ const userMsgs = userTpl.compile({ topic: 'quantum entanglement', focus: 'recent
 Pass `promptTemplate` and `userPromptTemplate` to `trace()` for automatic capture on LLM spans. **IMPORTANT**: Call `.compile()` **INSIDE** the `trace()` callback for variable bindings to be captured.
 
 ```typescript
-import { init, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapOpenAI, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { OpenAI } from 'openai';
 
 await init({
   apiKey: '...',
   workflowName: 'research',
-  instrumentations: ['openai'],
 });
 
-const { OpenAI } = await import('openai');
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());
 
 const sysTpl = new PromptTemplate([{
   role: 'system',

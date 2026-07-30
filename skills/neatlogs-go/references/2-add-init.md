@@ -46,7 +46,6 @@ func main() {
 | Field           | Type       | Notes                                                          |
 | --------------- | ---------- | -------------------------------------------------------------- |
 | `APIKey`        | `string`   | Required for export. Falls back to `NEATLOGS_API_KEY` env.     |
-| `Endpoint`      | `string`   | Base URL, no `/v1/traces`. Empty → managed cloud. Env fallback: `NEATLOGS_ENDPOINT`. |
 | `WorkflowName`  | `string`   | Logical name for this service/workflow.                        |
 | `Tags`          | `[]string` | Free-form tags stamped on traces.                              |
 | `Debug`         | `bool`     | Verbose SDK logging.                                           |

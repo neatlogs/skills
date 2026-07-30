@@ -200,6 +200,7 @@ def search(query: str) -> str:
 | `user_id` | `str` | `None` | The **operator** running the SDK (developer / service account) — NOT your app's end-user. For end-user/session identity see [Sessions & End-Users](#sessions--end-users) |
 | `debug` | `bool` | `False` | Enable verbose logging to stderr |
 | `pii_enabled` | `Optional[bool]` | `None` | Override the team-level server-side PII redaction setting. `True` = enable, `False` = disable, `None` (default) = use the team setting in the NeatLogs dashboard |
+| `pii_entities` | `Optional[list[str]]` | `None` | Which Presidio entities to redact, e.g. `["PERSON", "EMAIL_ADDRESS"]`. Persisted to the project. `None` = keep the project's saved selection |
 | `pii_span_types` | `Optional[list[str]]` | `None` | Override which span types have PII redaction applied. `None` = use team dashboard config |
 | `capture_logs` | `bool` | `False` | Capture `neatlogs.log()`, stdlib `logging.*()`, and `print()` (via `capture_stdout=True` on `@span`) as LOG spans |
 | `mask` | `callable` | `None` | Client-side mask function `(span_dict) -> span_dict` — see [Data Masking](#data-masking-and-pii) |
@@ -366,11 +367,14 @@ The example above is illustrative — real redaction logic should target the spe
 
 ### Server-Side PII Redaction
 
-Enable automatic server-side redaction via `init()`:
+Enable automatic server-side redaction via `init()`. `pii_entities` / `pii_span_types` are
+persisted to the project, so the dashboard reflects whatever you pass here:
 
 ```python
 neatlogs.init(
     pii_enabled=True,
+    pii_entities=["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"],  # None = keep saved selection
+    pii_span_types=["LLM", "TOOL"],                            # None = keep saved selection
 )
 ```
 

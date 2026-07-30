@@ -1,41 +1,51 @@
-# Step 2: Add init() — BEFORE the LLM SDK import
+# Step 2: Add init() and wrap the client
 
-`await init()` MUST run before the LLM SDK is imported, so auto-instrumentation patches it at load time. Convert the LLM SDK import to a dynamic `import()` AFTER init.
+Call `await init()` once at startup, then wrap each provider client at its construction site. LLM SDK imports stay plain static `import` statements — the helper patches the client **instance**, so there is no import-order rule.
 
 ```typescript
 import "dotenv/config";
-import { init } from "neatlogs";
+import { init, wrapOpenAI } from "neatlogs";
+import { OpenAI } from "openai";
 
 await init({
   apiKey: process.env.NEATLOGS_API_KEY ?? "",
   workflowName: "my-app",
-  instrumentations: ["openai"],   // or anthropic / google_genai / bedrock — from detect_stack
 });
 
-// LLM SDK imported AFTER init (dynamic) so the instrumentor patches it.
-const { OpenAI } = await import("openai");
-const client = new OpenAI();
+const client = wrapOpenAI(new OpenAI());   // use THIS client everywhere
 ```
 
-## WRONG vs RIGHT (import order)
+Pick the helper for the detected provider (all re-exported from `neatlogs`, or importable from their subpath):
+
+| SDK | Helper | Import from |
+|---|---|---|
+| OpenAI | `wrapOpenAI(new OpenAI())` | `neatlogs/openai` |
+| Azure OpenAI | `wrapAzureOpenAI(client)` | `neatlogs/azure-openai` |
+| Anthropic | `wrapAnthropic(new Anthropic())` | `neatlogs/anthropic` |
+| Google GenAI (Gemini) | `wrapGoogleGenAI(new GoogleGenAI({ apiKey }))` | `neatlogs/google-genai` |
+| Google GenAI (Vertex) | `wrapVertexAI(client)` | `neatlogs/vertex-ai` |
+| AWS Bedrock | `wrapBedrock(new BedrockRuntimeClient({}))` | `neatlogs/bedrock` |
+
+## Do NOT pass instrumentations — it throws
 
 ```typescript
-// ❌ WRONG — static top import of the LLM SDK before init. Not patched.
-import { OpenAI } from "openai";
-await init({ instrumentations: ["openai"] });   // too late
-
-// ✅ RIGHT — init first, dynamic import after.
+// ❌ WRONG — init() THROWS:
+//   The "openai" auto-instrumentation uses the global OpenTelemetry context and
+//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
+//   Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing.
 await init({ instrumentations: ["openai"] });
-const { OpenAI } = await import("openai");
+
+// ✅ RIGHT — wrap the instance.
+await init({ apiKey: process.env.NEATLOGS_API_KEY ?? "" });
+const client = wrapOpenAI(new OpenAI());
 ```
 
-## Top-level await
-If the project isn't ESM/top-level-await friendly, do init inside an async bootstrap that runs before anything else, then dynamically import the modules that use the SDK.
+Dynamic `await import("openai")` is also pointless here — it was only ever needed to beat a module-patching instrumentor, and there isn't one. Use a static import.
 
-## Do NOT pass endpoint= in code
-Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
+## Top-level await
+If the project isn't ESM/top-level-await friendly, run `init()` inside an async bootstrap that executes before the first traced call.
 
 ## Verify
-1. `await init(...)` is the first thing after dotenv.
-2. The LLM SDK is imported via `await import(...)` AFTER init, not at the top.
-3. `instrumentations` lists the detected provider key.
+1. `await init(...)` runs once at startup, with NO `instrumentations` key.
+2. Every provider client the code constructs is passed through its `wrap*` helper, and the WRAPPED value is what the rest of the code calls.
+3. LLM SDK imports are plain static imports.
