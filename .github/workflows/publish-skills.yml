@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'skills/**'
+      - '.claude-plugin/plugin.json'
+      - '.claude-plugin/marketplace.json'
       - '.github/workflows/publish-skills.yml'
     branches:
       - main
@@ -18,6 +20,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve release version
+        id: release
+        run: |
+          version=$(node -p "require('./.claude-plugin/plugin.json').version")
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=skills-v$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing skills version $version"
+
       - name: Package skills
         run: |
           cd skills
@@ -30,6 +41,8 @@ jobs:
           done
 
       - name: Generate skill-menu.json
+        env:
+          SKILLS_VERSION: ${{ steps.release.outputs.version }}
         run: |
           cd skills
           base="https://github.com/neatlogs/skills/releases/latest/download"
@@ -47,15 +60,15 @@ jobs:
             [ -n "$entries" ] && entries="${entries},"
             entries="${entries}{\"id\":\"${skill_id}\",\"name\":\"${name}\",\"downloadUrl\":\"${base}/${skill_id}.zip\"}"
           done
-          printf '{"version":"1.0","categories":{"setup":[%s]}}' "$entries" > skill-menu.json
+          printf '{"version":"%s","categories":{"setup":[%s]}}' "$SKILLS_VERSION" "$entries" > skill-menu.json
           echo "Generated skill-menu.json:"
           cat skill-menu.json | python3 -m json.tool
 
       - name: Create/update release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: skills-latest
-          name: Skills (Latest)
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Skills v${{ steps.release.outputs.version }}
           body: Auto-published skill packages for the Neatlogs wizard
           files: |
             skills/*.zip
