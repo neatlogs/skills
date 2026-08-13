@@ -37,6 +37,10 @@ Requires Node.js >= 18.
 6. **All lifecycle functions are async**: `init()`, `flush()`, and `shutdown()` return Promises and must be awaited.
 7. **Named imports**: Always use named imports from `'neatlogs'`.
 
+### Transport selection
+
+Use this SDK for TypeScript/Node.js. Neatlogs also has SDKs for Python and Go. For a language without a supported Neatlogs SDK, default to the dependency-free HTTP ingest endpoint `POST /v1/trace`; if that project already emits OpenTelemetry, OTLP/gRPC is also supported. Use the `neatlogs-ingest` skill for the complete HTTP and gRPC contracts. Do not confuse `/v1/trace` nested JSON with the `/v1/traces` OTLP/HTTP protobuf route.
+
 ---
 
 ## Quick Start
@@ -121,12 +125,17 @@ Neatlogs runs on a **private `TracerProvider` and a private active-context store
 
 - **`tracerProvider`** (init option): pass your own `BasicTracerProvider` — the SDK adds processors + flushes but never registers it globally or shuts it down.
 - **`registerShutdownHandlers`** (init option): `beforeExit`/`SIGTERM`/`SIGINT` flush + shutdown; defaults `true` when Neatlogs owns the provider (so scripts drain spans), `false` when you pass `tracerProvider`.
-- **`injectTraceContext(carrier)`**: opt-in W3C `traceparent`/`tracestate` propagation at a cross-process boundary (the global OTel propagator is deliberately NOT used). Returns `false` if no valid Neatlogs span is active. `carrier` is `Record<string,string>` or anything with `set(name, value)` (e.g. a `Headers`).
+- **`injectTraceContext(carrier)`**: caller-side W3C propagation. Returns `false` if no valid Neatlogs span is active.
+- **`extractTraceContext(carrier, fn)`**: callee-side continuation. Runs `fn` under the inbound remote parent in Neatlogs' private context and returns its sync value or Promise. Invalid/missing headers are a fail-open passthrough.
 
 ```typescript
-import { injectTraceContext } from 'neatlogs';
+import { extractTraceContext, injectTraceContext, trace } from 'neatlogs';
 const headers: Record<string, string> = {};
 if (injectTraceContext(headers)) await fetch(url, { headers });
+
+await extractTraceContext(request.headers, () =>
+  trace({ name: 'remote_work' }, async () => { /* joins caller's trace */ }),
+);
 ```
 
 ---
@@ -165,6 +174,21 @@ await identify({ sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { p
   await client.chat.completions.create(/* ... */); // the wrapper's auto-root inherits the identity (framework wrappers too, on recent versions)
 });
 ```
+
+Lineage uses `parentSessionId`; application-defined fields use one arbitrary `sessionCustomFields` object:
+
+```typescript
+await identify({
+  sessionId: 'child_123',
+  parentSessionId: 'parent_456',
+  sessionCustomFields: { feature_name: 'chat', entry_point: 'slack', tenant: 'acme' },
+}, runTurn);
+```
+
+Never hardcode a custom key as a new SDK option. Custom fields are encoded under `neatlogs.session.custom_fields`.
+
+For retrieval spans, always emit the canonical `neatlogs.retriever.*`
+namespace. `neatlogs.retrieval.*` is an ingestion-only legacy alias.
 
 > **Browser SDK** (`neatlogs/browser`) uses the same field names — `endUserId`, `endUserMetadata`, `sessionId` — as client-constructor defaults or per-call on `trace()` / `trackAI()`.
 

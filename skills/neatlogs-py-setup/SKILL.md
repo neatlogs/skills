@@ -4,7 +4,6 @@ description: Use when adding neatlogs observability to a Python LLM/agent projec
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "2.0"
   language: python
 ---
 

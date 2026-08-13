@@ -3,7 +3,6 @@ name: neatlogs-ts-pi-agent
 description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses maintained `@earendil-works/pi-agent-core` / `@earendil-works/pi-ai` or legacy `@mariozechner` Pi packages, including `Agent`, `AgentHarness`, functional loops, and standalone stream functions.
 metadata:
   author: neatlogs
-  version: "1.0"
   language: typescript
   framework: pi-agent
 ---

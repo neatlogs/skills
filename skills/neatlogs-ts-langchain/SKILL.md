@@ -4,7 +4,6 @@ description: Use when adding neatlogs observability to a TypeScript/Node.js proj
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "3.0"
   language: typescript
   framework: langchain
 ---

@@ -94,7 +94,7 @@ def web_search(query: str) -> str:
 
 #### RETRIEVER
 
-RAG retrieval. For supported retrieval libraries (LangChain retrievers, chromadb, pinecone, etc.) auto-instrumentation handles everything — no decorator needed. For a **custom** retriever, use `@span(kind="RETRIEVER")` plus a nested `trace()` block to set `neatlogs.retrieval.*` attributes:
+RAG retrieval. For supported retrieval libraries (LangChain retrievers, chromadb, pinecone, etc.) auto-instrumentation handles everything — no decorator needed. For a **custom** retriever, use `@span(kind="RETRIEVER")` plus a nested `trace()` block to set `neatlogs.retriever.*` attributes:
 
 ```python
 import json
@@ -102,10 +102,10 @@ import json
 @neatlogs.span(kind="RETRIEVER")
 def retrieve_docs(query: str, top_k: int = 5) -> list:
     with neatlogs.trace("retrieval_details") as span:
-        span.set_attribute("neatlogs.retrieval.query", query)
-        span.set_attribute("neatlogs.retrieval.top_k", top_k)
+        span.set_attribute("neatlogs.retriever.query", query)
+        span.set_attribute("neatlogs.retriever.top_k", top_k)
         docs = vector_db.search(query, top_k=top_k)
-        span.set_attribute("neatlogs.retrieval.documents", json.dumps(docs))
+        span.set_attribute("neatlogs.retriever.documents", json.dumps(docs))
     return docs
 ```
 
@@ -361,9 +361,12 @@ For provider auto-instrumentation, use `instrumentations=["openai"]` (etc.) — 
 
 | Attribute | Type | Description |
 |---|---|---|
-| `neatlogs.retrieval.query` | `str` | The retrieval query |
-| `neatlogs.retrieval.top_k` | `int` | Number of results requested |
-| `neatlogs.retrieval.documents` | `JSON str` | Retrieved documents |
+| `neatlogs.retriever.query` | `str` | The retrieval query |
+| `neatlogs.retriever.top_k` | `int` | Number of results requested |
+| `neatlogs.retriever.documents` | `JSON str` | Retrieved documents |
+
+Always emit `neatlogs.retriever.*`. `neatlogs.retrieval.*` is a legacy ingest
+alias and must not be used by new SDK code or examples.
 
 ### GUARDRAIL Attributes (custom implementations)
 

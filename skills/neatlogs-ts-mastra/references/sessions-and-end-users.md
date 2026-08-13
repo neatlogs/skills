@@ -1,5 +1,20 @@
 # Sessions & End-Users — NeatLogs TypeScript SDK (Mastra)
 
+Lineage uses `parentSessionId`. Application-specific session data belongs in the
+arbitrary `sessionCustomFields` object and is stored as
+`neatlogs.session.custom_fields`; never add a fixed SDK option for an individual
+custom key:
+
+```typescript
+await identify({
+  sessionId: 'child_123',
+  parentSessionId: 'parent_456',
+  sessionCustomFields: { feature_name: 'chat', entry_point: 'slack', tenant: 'acme' },
+  endUserId: 'u_456',
+}, runTurn);
+```
+
+
 ## Why
 
 A Mastra agent usually serves many different customers, and each customer holds a

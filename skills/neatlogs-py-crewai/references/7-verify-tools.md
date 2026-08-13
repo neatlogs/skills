@@ -44,17 +44,17 @@ def web_search(query: str) -> str:
 Retrieval / embedding / vector-lookup tools should get a `with neatlogs.trace(kind="RETRIEVER")`
 inside the body — NOT because the tool would otherwise be untraced (wrap() traces
 it as a TOOL), but to upgrade it to a RETRIEVER span carrying the rich
-`neatlogs.retrieval.*` attributes (query + documents) the dashboard renders.
+`neatlogs.retriever.*` attributes (query + documents) the dashboard renders.
 
 ```python
 @tool("kb_search")
 def kb_search_tool(query: str) -> str:
     """Search the product knowledge base."""
     with neatlogs.trace("kb_search", kind="RETRIEVER") as span:
-        span.set_attribute("neatlogs.retrieval.query", query)
-        span.set_attribute("neatlogs.retrieval.top_k", 3)
+        span.set_attribute("neatlogs.retriever.query", query)
+        span.set_attribute("neatlogs.retriever.top_k", 3)
         results = KB.search(query, top_k=3)
-        span.set_attribute("neatlogs.retrieval.documents", json.dumps(results))
+        span.set_attribute("neatlogs.retriever.documents", json.dumps(results))
         return KB.format_results(results)
 ```
 
@@ -79,6 +79,6 @@ def create_researcher() -> Agent:
 ## Verification
 
 - [ ] Plain action tools (`@tool` functions and `BaseTool` subclasses) are LEFT AS-IS — no `@neatlogs.span` decorator and no manual `trace()` inside (wrap() auto-traces them; a manual span would duplicate).
-- [ ] Retrieval/embedding tools have `with neatlogs.trace(kind="RETRIEVER")` + `neatlogs.retrieval.*` INSIDE the body (enrichment, not coverage).
+- [ ] Retrieval/embedding tools have `with neatlogs.trace(kind="RETRIEVER")` + `neatlogs.retriever.*` INSIDE the body (enrichment, not coverage).
 - [ ] NO Agent factory or Task has `@neatlogs.span()`.
 - [ ] The crew was passed through `neatlogs.wrap(...)`; any `@neatlogs.span(kind="WORKFLOW")` is on your entry point (the `crew.kickoff()` caller).

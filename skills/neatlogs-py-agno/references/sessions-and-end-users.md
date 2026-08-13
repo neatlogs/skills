@@ -1,5 +1,21 @@
 # Sessions & end-users
 
+Lineage is modeled with `parent_session_id`. Application-specific session data is
+not hardcoded into SDK parameters: pass any JSON-compatible keys through
+`session_custom_fields={...}`. The SDK stores that object as
+`neatlogs.session.custom_fields` on the root span. For example:
+
+```python
+with neatlogs.identify(
+    session_id="child_123",
+    parent_session_id="parent_456",
+    session_custom_fields={"feature_name": "chat", "entry_point": "slack", "tenant": "acme"},
+    end_user_id="u_456",
+):
+    run_turn()
+```
+
+
 Attaching a session + end-user to a turn's trace turns raw traces into customer analytics: usage / cost / errors per user and segment, multi-turn conversation timelines, and per-customer replay. Without it, traces are anonymous and can't be rolled up by who caused them.
 
 ## Model

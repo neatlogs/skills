@@ -1,5 +1,20 @@
 # Sessions & End-Users — NeatLogs Vercel AI SDK
 
+Lineage uses `parentSessionId`. Application-specific session data belongs in the
+arbitrary `sessionCustomFields` object and is stored as
+`neatlogs.session.custom_fields`; never add a fixed SDK option for an individual
+custom key:
+
+```typescript
+await identify({
+  sessionId: 'child_123',
+  parentSessionId: 'parent_456',
+  sessionCustomFields: { feature_name: 'chat', entry_point: 'slack', tenant: 'acme' },
+  endUserId: 'u_456',
+}, runTurn);
+```
+
+
 Attach **session** and **end-user** identity to your `wrapAISDK` calls so the dashboard can slice
 usage, cost, and errors **per customer end-user** and **per segment**, stitch a customer's turns into
 a **multi-turn timeline**, and drive **per-customer replay**. The identity here is your *product's*

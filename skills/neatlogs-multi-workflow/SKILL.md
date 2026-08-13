@@ -8,7 +8,6 @@ description: >
   service or app has more than one independent feature or agent flow.
 metadata:
   author: neatlogs
-  version: "1.0"
   language: any
 ---
 

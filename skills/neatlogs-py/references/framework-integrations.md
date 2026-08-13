@@ -374,17 +374,15 @@ if __name__ == "__main__":
 
 ## 7. CrewAI
 
-- **Instrumentation key**: `instrumentations=["crewai", "<provider_key>"]`. Pick the provider key that matches the underlying LLM backing `crewai.LLM(...)`:
-  - OpenAI (`OPENAI_API_KEY` + `model="gpt-4o"` / similar) → `"openai"`
-  - Azure OpenAI (`model="azure/..."`) → `"azure_ai_inference"`
-  - Google GenAI (`model="gemini/..."`) → `"google_genai"`
-  - Anthropic (`model="claude-..."`) → `"anthropic"`
+- **Preferred path**: `crew = neatlogs.wrap(crew)`. This installs Crew/Task/Agent/tool/LLM hooks and binds workflow metadata.
+- **Valid zero-touch alternative for a bare Crew**: `instrumentations=["crewai"]` alone.
+- **Flows and standalone Agents require `wrap()`** because their run entrypoints are routed per instance.
 - **Use `bind_templates()`** to attach prompt context to agent LLMs
 - **Use `register_crewai_task(task, user_tpl, **vars)`** for task-level prompt tracking
 - **Install**: `pip install --upgrade neatlogs[crewai]` (pulls in `crewai >= 1.9.3` and `litellm`)
 - **Version note**: SDK pins `crewai >= 1.9.3`. CrewAI API has changed significantly between versions — ensure version compatibility.
 
-> **Why the provider key matters here**: CrewAI dispatches LLM calls internally via LiteLLM. For OpenAI-proper the `openai` instrumentor catches the call; for Azure OpenAI (a different SDK path) you need `azure_ai_inference`, otherwise the LLM call succeeds but no `LLM`-kind span is produced — the trace shows only the Agent parent with no LLM child.
+> **Do not add a provider key based on the model string.** The CrewAI hook patches `LLM.call` directly for OpenAI, Azure, Gemini, Anthropic, and local models. Adding a provider instrumentor can produce duplicate LLM spans.
 
 ```python
 import os
@@ -394,9 +392,7 @@ from neatlogs import SystemPromptTemplate, UserPromptTemplate
 neatlogs.init(
     api_key="...",  # Get from https://app.neatlogs.com/settings/api-keys (or set NEATLOGS_API_KEY env var)
     workflow_name="crewai-app",
-    # Azure OpenAI backend -> azure_ai_inference. Swap for openai / google_genai /
-    # anthropic depending on what crewai.LLM(model=...) points at.
-    instrumentations=["crewai", "azure_ai_inference"],
+    instrumentations=["crewai"],
 )
 
 from crewai import Agent, Task, Crew, LLM

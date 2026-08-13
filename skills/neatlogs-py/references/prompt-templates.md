@@ -132,7 +132,7 @@ from neatlogs import SystemPromptTemplate
 neatlogs.init(
     api_key="...",  # Get from https://app.neatlogs.com/settings/api-keys (or set NEATLOGS_API_KEY env var)
     workflow_name="marketing",
-    instrumentations=["crewai", "openai"],
+    instrumentations=["crewai"],
 )
 
 # System template must NOT have required placeholders — bind_templates()

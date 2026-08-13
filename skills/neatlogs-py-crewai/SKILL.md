@@ -4,7 +4,6 @@ description: Use when adding neatlogs observability to a Python project that use
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "3.1"
   language: python
   framework: crewai
 ---
@@ -47,7 +46,7 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 
 ## Tools are auto-traced — do NOT add manual tool spans
 
-`wrap()` traces tool calls on BOTH dispatch paths — `BaseTool.run` (for `BaseTool` subclasses) and `CrewStructuredTool.invoke` (for `@tool` function tools) — on every supported crewai version (0.130.x through 1.15.x). This is NOT version-dependent. Leave plain action tools undecorated: adding `@neatlogs.span` or a manual `trace(kind="TOOL")` inside a plain tool produces a DUPLICATE span. The only manual span is `trace(kind="RETRIEVER")` inside retrieval/embedding tools, to add `neatlogs.retrieval.*` attributes. Step 7 covers this.
+`wrap()` traces tool calls on BOTH dispatch paths — `BaseTool.run` (for `BaseTool` subclasses) and `CrewStructuredTool.invoke` (for `@tool` function tools) — on every supported crewai version (0.130.x through 1.15.x). This is NOT version-dependent. Leave plain action tools undecorated: adding `@neatlogs.span` or a manual `trace(kind="TOOL")` inside a plain tool produces a DUPLICATE span. The only manual span is `trace(kind="RETRIEVER")` inside retrieval/embedding tools, to add `neatlogs.retriever.*` attributes. Step 7 covers this.
 
 ## What you MUST do
 

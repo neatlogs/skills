@@ -51,6 +51,10 @@ Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 5. **Init is single-shot**: `neatlogs.init()` configures the global telemetry provider. Calling it again is a no-op. If you need to reinitialize, call `neatlogs.shutdown()` first (rare).
 6. **Read reference docs** before implementing — NeatLogs updates frequently.
 
+### Transport selection
+
+Use this SDK for Python. Neatlogs also has SDKs for TypeScript/Node.js and Go. For a language without a supported Neatlogs SDK, default to the dependency-free HTTP ingest endpoint `POST /v1/trace`; if that project already emits OpenTelemetry, OTLP/gRPC is also supported. Use the `neatlogs-ingest` skill for the complete HTTP and gRPC contracts. Do not confuse `/v1/trace` nested JSON with the `/v1/traces` OTLP/HTTP protobuf route.
+
 ---
 
 ## Quick Start
@@ -233,6 +237,19 @@ with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_meta
     client.chat.completions.create(...)
 ```
 
+Session lineage has two fixed IDs plus arbitrary fields supplied by the application:
+
+```python
+with neatlogs.identify(
+    session_id="child_123",
+    parent_session_id="parent_456",
+    session_custom_fields={"feature_name": "chat", "entry_point": "slack", "tenant": "acme"},
+):
+    client.chat.completions.create(...)
+```
+
+`session_custom_fields` is a free-form dict encoded as `neatlogs.session.custom_fields`; do not invent fixed SDK parameters for individual custom keys.
+
 ---
 
 ## Cross-Process Propagation
@@ -240,7 +257,7 @@ with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_meta
 To keep **one logical trace** when a request crosses a service boundary (Python → Python/Go, gateway → worker), carry the active span as W3C `traceparent`/`tracestate` headers: the **caller injects**, the **callee extracts**. Both helpers use NeatLogs' **private** propagator — they never read or replace the global OTel propagator, so propagation stays isolated from any co-tenant tracer (Datadog / Langfuse / OpenLLMetry).
 
 - **`neatlogs.inject_trace_context(carrier) -> bool`** — caller side, right before an outbound request. `carrier` is any mutable header mapping (a `dict`, a `requests` `CaseInsensitiveDict`, …). Returns `True` when a NeatLogs span was active and headers were written; `False` when nothing is active (carrier untouched). An upstream `traceparent` already present is preserved, not overwritten.
-- **`neatlogs.extract_trace_context(carrier, *, session_id=None, end_user_id=None, end_user_metadata=None)`** — callee side, a **context manager**. Inside it the next `trace()` / `@span` / `wrap()` root nests under the remote span and shares its `trace_id`. No valid `traceparent` → no-op passthrough (identity still binds).
+- **`neatlogs.extract_trace_context(carrier, *, session_id=None, parent_session_id=None, session_custom_fields=None, end_user_id=None, end_user_metadata=None)`** — callee side, a **context manager**. Inside it the next `trace()` / `@span` / `wrap()` root nests under the remote span and shares its `trace_id`. No valid `traceparent` → no-op passthrough (identity still binds).
 
 ```python
 import neatlogs, requests
@@ -257,13 +274,15 @@ def handle(req):
     with neatlogs.extract_trace_context(
         req.headers,
         session_id=req.session_id,   # identity does NOT ride the wire — re-bind it here
+        parent_session_id=req.parent_session_id,
+        session_custom_fields=req.session_custom_fields,
         end_user_id=req.user_id,
     ):
         with neatlogs.trace("do_tool"):   # joins the caller's trace as a child
             ...
 ```
 
-> Use these helpers, **NOT** a bare `opentelemetry.propagate.inject(headers)` — the bare call reads the global propagator, which under NeatLogs' private-provider isolation does not see the active span and writes an empty carrier. Identity (`session_id` / `end_user_id`) does not travel on the `traceparent`; re-bind it on the callee from the request payload. Peers in Go (`InjectTraceContext` / `ExtractTraceContext`) and TypeScript (`injectTraceContext`, inject-only) speak the same W3C wire format.
+> Use these helpers, **NOT** a bare `opentelemetry.propagate.inject(headers)` — the bare call reads the global propagator, which under NeatLogs' private-provider isolation does not see the active span and writes an empty carrier. Identity does not travel on the `traceparent`; re-bind it on the callee from the request payload. Peers in Go and TypeScript (`injectTraceContext` / `extractTraceContext`) speak the same W3C wire format.
 
 ---
 
@@ -278,7 +297,7 @@ Pass these string values in the `instrumentations=[]` list to `neatlogs.init()`.
 | `openai` | OpenAI (`OpenAI()` and `AzureOpenAI()`) | Tested end-to-end |
 | `anthropic` | Anthropic | Tested |
 | `google_genai` | Google Generative AI (`google.genai`) | Tested. Client must be created **after** `init()` — see troubleshooting |
-| `azure_ai_inference` | Azure AI Inference | Tested. Required when CrewAI dispatches to Azure — see §CrewAI below |
+| `azure_ai_inference` | Azure AI Inference | Tested for direct Azure AI Inference calls |
 | `litellm` | LiteLLM | Tested end-to-end with `gemini/*` + message-list templates |
 | `bedrock` | AWS Bedrock | Tested. `boto3>=1.42.11` |
 
@@ -288,20 +307,11 @@ Pass these string values in the `instrumentations=[]` list to `neatlogs.init()`.
 |---|---|---|
 | `langchain` | LangChain (incl. LangGraph execution) | Tested end-to-end |
 | `langgraph` | LangGraph — use `instrumentations=["langchain"]` | Tested via LangChain |
-| `crewai` | CrewAI | Tested. **Must also add the direct provider key** matching `crewai.LLM(model=...)` — see below |
+| `crewai` | CrewAI | Valid zero-touch path for a bare Crew; no provider key is needed. Prefer `wrap(crew)` for workflow metadata and use it for Flows / standalone Agents |
 
-#### CrewAI routing rules
+#### CrewAI routing rule
 
-CrewAI dispatches LLM calls internally via LiteLLM; adding only `"crewai"` is not enough. Match the provider key to your `crewai.LLM(model=...)` prefix:
-
-| `crewai.LLM(model=...)` | Required instrumentations |
-|---|---|
-| `"gpt-4o"` (OpenAI proper) | `["crewai", "openai"]` |
-| `"azure/..."` | `["crewai", "azure_ai_inference"]` |
-| `"gemini/..."` | `["crewai", "google_genai"]` |
-| `"claude-..."` | `["crewai", "anthropic"]` |
-
-Picking the wrong key makes the LLM call silently untraced — the trace UI shows only the Agent parent with no LLM child. See [`references/troubleshooting.md` §4](references/troubleshooting.md#4-crewai-instrumentation-key-selection) for the full diagnostic.
+The CrewAI hook patches `LLM.call` directly, independent of whether the model is OpenAI, Azure, Gemini, Anthropic, or local. Use `instrumentations=["crewai"]` alone for a bare Crew, or `neatlogs.wrap(crew)` as the preferred instance path. Do not pair CrewAI with a provider key based on the model string; that can double-fire the LLM span.
 
 ### Vector Databases
 

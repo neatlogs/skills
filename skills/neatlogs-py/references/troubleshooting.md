@@ -63,33 +63,23 @@ If traces are not appearing in the NeatLogs dashboard, check these in order:
 
 ---
 
-## 4. CrewAI Instrumentation Key Selection
+## 4. CrewAI Instrumentation
 
-When using CrewAI, pair `"crewai"` with the provider key that matches your `crewai.LLM(model=...)`:
+Use `neatlogs.wrap(crew)` (preferred), or `instrumentations=["crewai"]` alone for a bare Crew. The CrewAI hook patches `LLM.call` itself, so the model provider does not change the instrumentation choice.
 
-| `crewai.LLM(model=...)` | Correct `instrumentations=[...]` |
-|---|---|
-| `"gpt-4o"` (OpenAI proper) | `["crewai", "openai"]` |
-| `"azure/..."` | `["crewai", "azure_ai_inference"]` |
-| `"gemini/..."` | `["crewai", "google_genai"]` |
-| `"claude-..."` | `["crewai", "anthropic"]` |
-
-> Don't add `"litellm"` alongside a direct provider key — the two can double-fire and produce duplicate LLM spans.
+Do not pair `"crewai"` with `"openai"`, `"azure_ai_inference"`, `"google_genai"`, `"anthropic"`, or `"litellm"` merely because CrewAI uses that model. Provider pairing can produce duplicate LLM spans. Flows and standalone Agents require `wrap()`.
 
 ### Few-shot examples
 
 ```python
-# Example 1: CrewAI + Azure OpenAI
-neatlogs.init(instrumentations=["crewai", "azure_ai_inference"])
+# Example 1: Bare Crew, any model provider
+neatlogs.init(instrumentations=["crewai"])
 llm = LLM(model="azure/gpt-5-nano", base_url=..., api_key=..., api_version=...)
 
-# Example 2: CrewAI + OpenAI proper
-neatlogs.init(instrumentations=["crewai", "openai"])
+# Example 2: Preferred instance path
+neatlogs.init()
+crew = neatlogs.wrap(Crew(...))
 llm = LLM(model="gpt-4o")
-
-# Example 3: CrewAI + Gemini
-neatlogs.init(instrumentations=["crewai", "google_genai"])
-llm = LLM(model="gemini/gemini-2.5-flash")
 ```
 
 ---

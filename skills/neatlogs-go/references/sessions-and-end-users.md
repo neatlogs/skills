@@ -32,8 +32,22 @@ ctx = neatlogs.Identify(ctx, neatlogs.IdentifyOptions{
 })
 ```
 
-`IdentifyOptions` fields: `SessionID string`, `EndUserID string`,
-`EndUserMetadata map[string]any`. Only non-empty fields are applied.
+`IdentifyOptions` includes `SessionID`, optional `ParentSessionID`, arbitrary
+`SessionCustomFields map[string]any`, `EndUserID`, and `EndUserMetadata`.
+Custom fields merge when `Identify` is called again and are encoded under
+`neatlogs.session.custom_fields` on the root span.
+
+```go
+ctx = neatlogs.Identify(ctx, neatlogs.IdentifyOptions{
+    SessionID:       "child_123",
+    ParentSessionID: "parent_456",
+    SessionCustomFields: map[string]any{
+        "feature_name": "chat",
+        "entry_point":  "slack",
+        "tenant":       "acme",
+    },
+})
+```
 
 ## Multi-turn example (Gemini via `WrapGenAI`)
 

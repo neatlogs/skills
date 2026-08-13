@@ -4,7 +4,6 @@ description: Use when adding neatlogs observability to a Go project — Google G
 compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
-  version: "1.1"
   language: go
   framework: genai
 ---
@@ -19,6 +18,10 @@ symmetrically, OTel-native frameworks are **not** auto-captured. You instrument
 explicitly: `WrapGenAI()` wraps a `google.golang.org/genai` client, and a small
 set of span helpers cover direct provider calls, retrieval, and boundaries.
 Export is OTLP/HTTP to the managed Neatlogs cloud.
+
+## Transport selection
+
+Use this SDK for Go. Neatlogs also has SDKs for Python and TypeScript/Node.js. For a language without a supported Neatlogs SDK, default to the dependency-free HTTP ingest endpoint `POST /v1/trace`; if that project already emits OpenTelemetry, OTLP/gRPC is also supported. Use the `neatlogs-ingest` skill for the complete HTTP and gRPC contracts. Do not confuse `/v1/trace` nested JSON with the `/v1/traces` OTLP/HTTP protobuf route.
 
 Module: `github.com/neatlogs/neatlogs-go` (requires Go 1.25+). The Gemini wrapper
 lives in a separate module (`contrib/genai`) so its heavy dependency stays out of
@@ -103,6 +106,7 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `APIKey` | `string` | `NEATLOGS_API_KEY` env | Auth key. Empty (after env fallback) → export disabled, spans dropped |
+| `Endpoint` | `string` | `https://ingest.neatlogs.com` | OTLP/HTTP ingest base URL |
 | `WorkflowName` | `string` | executable name | Labels this service/run |
 | `Tags` | `[]string` | `nil` | Attached to every span as a resource attribute |
 | `Debug` | `bool` | `false` | Verbose diagnostics on stderr |
@@ -119,3 +123,5 @@ check the Neatlogs dashboard. For `WrapGenAI`, confirm the `llm` span nests unde
 an auto `workflow` root and carries input/output messages + token usage. For the
 explicit helpers, confirm each `StartLLMSpan` / `StartRetrieverSpan` records its
 I/O (an empty retriever result is recorded as `"[]"`, not omitted).
+`StartRetrieverSpan` emits the canonical `neatlogs.retriever.*` namespace;
+never emit the legacy `neatlogs.retrieval.*` spelling from new code.
