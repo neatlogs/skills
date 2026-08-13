@@ -48,7 +48,7 @@ Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 2. **Scripts**: end with `neatlogs.flush()` then `neatlogs.shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` / `shutdown()` per request — see [Long-Running Servers](#long-running-servers) below.
 3. **`@span` for custom code**, **`trace()` for prompt templates** — use `@span(kind="...")` to decorate orchestration functions, use `with neatlogs.trace(kind="LLM", system_prompt_template=..., user_prompt_template=...)` to attach prompt templates to LLM calls.
 4. **Prefer auto-instrumentation** (`instrumentations=["openai"]`) over manual wrapping when a supported library is available.
-5. **Init is single-shot**: `neatlogs.init()` configures the global telemetry provider. Calling it again is a no-op. If you need to reinitialize, call `neatlogs.shutdown()` first (rare).
+5. **Init is single-shot**: `neatlogs.init()` configures the global telemetry provider. Calling it again is a no-op — it will NOT switch projects, even with a different `api_key`/`workflow_name`. If you need to reinitialize the SAME project, call `neatlogs.shutdown()` first (rare). If the need is a genuinely DIFFERENT project (different API key) from the same process, that's not a second `init()` at all — see [Multiple Projects](#multiple-projects-secondary-clients) below.
 6. **Read reference docs** before implementing — NeatLogs updates frequently.
 
 ### Transport selection
@@ -157,6 +157,42 @@ async def ask(q: str):
 ```
 
 For non-FastAPI servers, hook `neatlogs.flush()` + `neatlogs.shutdown()` into the framework's shutdown event (or an `atexit` handler). See [`references/troubleshooting.md` §5](references/troubleshooting.md#5-flush--shutdown-gotcha) for the async gotcha.
+
+---
+
+## Multiple Projects (Secondary Clients)
+
+**Python only, `neatlogs>=1.4.19`.** This is for a narrower, rarer need than [Long-Running Servers](#long-running-servers) above: some traces from this SAME process need to go to a genuinely DIFFERENT Neatlogs project — different API key, fully isolated pipeline — not just a different `workflow_name` label in the same project. The usual trigger is multi-tenant: each tenant has their own Neatlogs project.
+
+Do NOT call `neatlogs.init()` a second time for this — it's a no-op (see Core Principle 5 above). Use `neatlogs.Client(...)` instead:
+
+```python
+import neatlogs
+
+# The process-wide default — unchanged, still called once.
+neatlogs.init(api_key=os.environ["NEATLOGS_API_KEY"], workflow_name="my-service")
+
+# A second, fully isolated project for this tenant — NOT another init().
+tenant_client = neatlogs.Client(
+    api_key=tenant_api_key,
+    workflow_name=f"tenant-{tenant_id}",
+    capture_logs=True,   # only if you also want neatlogs.log() routed to this client
+)
+
+with tenant_client.activate():
+    # Everything in here — wrap(), trace(), @span, log() — routes to
+    # tenant_client's pipeline. contextvars-scoped, so concurrent requests
+    # for DIFFERENT tenants never leak into each other's traces.
+    client = neatlogs.wrap(OpenAI())
+    with neatlogs.trace("handle_request", kind="WORKFLOW"):
+        response = client.chat.completions.create(...)
+
+# Outside the block, back to the default init() pipeline.
+```
+
+`tenant_client.wrap(target)` is a shortcut for `with tenant_client.activate(): neatlogs.wrap(target)` in one call. Each `Client` has its own `flush()`/`shutdown()`, independent of the default pipeline and of every other `Client` — flushing one never flushes another.
+
+**Being mounted/routed differently within one process is not itself a signal for anything — almost everything stays on one project.** Different features, different routes, even a sub-app mounted into the same process (`app.mount(...)` or equivalent) all just get their own `workflow_name`; a separately-booted worker process gets its own ordinary `init()` call with the SAME key, no conflict. `Client` is for a narrower, different situation: this code's telemetry genuinely belongs to a DIFFERENT project — either (a) different tenants/customers routed at runtime (explicit multi-tenant SaaS), or (b) this code reads/analyzes ANOTHER project's traces as its own input data, so its own traces landing there would corrupt what it's analyzing (not just an organizational preference — a structural conflict). Both are real ownership/architecture facts, never inferred from code structure — confirm with the user rather than guessing. If you find an EXISTING second `init()`-style call already trying to target different credentials inside one process, flag it explicitly — it is very likely silently non-functional (`init()` warns and returns on a second call, it does not "isolate" anything, even when the second call is inside something mounted separately). TypeScript and Go have no equivalent yet.
 
 ---
 
