@@ -56,4 +56,6 @@ const nextConfig = { serverExternalPackages: ["@mastra/core", "neatlogs"] };    
 - [ ] `init()` runs in `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via DYNAMIC `await import("neatlogs")` (NOT top-level). ← the key crypto fix
 - [ ] `next.config` lists `@mastra/core` (and `neatlogs`) in `serverExternalPackages` so routes bundle.
 - [ ] Each agent/workflow used in a route is `wrapMastra()`-wrapped and the wrapped reference is imported.
-- [ ] Server boots without `Can't resolve 'crypto'`; hitting a route produces AGENT/LLM/TOOL spans.
+- [ ] Run the repository's package-manager build command after editing and fix instrumentation-related build/type errors.
+- [ ] Stop the old Next.js process and start a fresh process; hot reload does not prove a newly-added startup hook loaded. Rebuild/redeploy production.
+- [ ] Exercise the actual Mastra route/action and confirm a new trace reaches the target project with one AGENT/LLM/TOOL hierarchy and no duplicates.

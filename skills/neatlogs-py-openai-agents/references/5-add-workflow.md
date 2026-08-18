@@ -1,16 +1,14 @@
-# Step 5: Add the WORKFLOW Span (and ONLY that)
+# Step 5: Optional App-Owned WORKFLOW Span
 
-## The One Decorator You Add
+## Add it only for real surrounding orchestration
 
-The trace processor (Step 4) traces agents, tools, handoffs, guardrails, and LLM calls. The one thing it cannot do is create the trace root. Add exactly one:
+The trace processor (Step 4) creates the canonical `WORKFLOW` root and traces agents, tools, handoffs, guardrails, and LLM calls. A standalone `Runner.run()` therefore renders without a manual decorator. Add at most one app-owned outer span:
 
 ```python
 @neatlogs.span(kind="WORKFLOW", name="...")
 ```
 
-on the **user-facing function that calls `Runner.run()`** (or `Runner.run_sync()` / `Runner.run_streamed()`) — the function a person/CLI/route actually invokes.
-
-Without this WORKFLOW root, every traced agent/tool/handoff/LLM span becomes an orphan in its own trace and nothing shows up grouped together.
+on the **user-facing function that calls `Runner.run()`** (or `Runner.run_sync()` / `Runner.run_streamed()`) only when that function owns meaningful pre/post work or coordinates multiple runs. Do not add it around a pass-through that only calls one supported `Runner` entry point.
 
 ## How to Find It
 
@@ -18,7 +16,7 @@ Look for the function that:
 - Is `main()`, a `@cli.command()`, a FastAPI route, or similar entry point, AND
 - Calls `Runner.run(agent, ...)` / `await Runner.run(...)` / `Runner.run_sync(...)`
 
-That function — and ONLY that function — gets `@span(kind="WORKFLOW")`.
+Only that outer function may get `@span(kind="WORKFLOW")`, and only when the preceding condition is true.
 
 If the entry point is an async function run via `asyncio.run(...)`, decorate the async function that contains the `Runner.run()` call (not the `asyncio.run` line).
 
@@ -73,6 +71,6 @@ def ask(query: str):
 
 ## Verify BEFORE moving on
 
-1. EXACTLY ONE `@span(kind="WORKFLOW")` in the project — on the `Runner.run()` caller.
+1. At most one app-owned `@span(kind="WORKFLOW")` for this path — on a real user-facing `Runner.run()` orchestrator; zero is correct for a single pass-through run.
 2. NO Agent definition/factory, `@function_tool`, guardrail, or handoff has a neatlogs decorator.
 3. The trace processor is registered once (Step 4): `add_trace_processor(neatlogs.openai_agents_processor())`. `init()` has NO `instrumentations=`.

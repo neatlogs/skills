@@ -3,14 +3,14 @@ name: neatlogs-py
 description: >
   NeatLogs is an AI agent debugging and observability platform. Use this skill when
   instrumenting Python LLM applications with neatlogs for tracing, monitoring, debugging,
-  observability, decorators, spans, prompt template tracking, or auto-instrumentation of
+  observability, decorators, spans, or instrumentation of
   LLM providers and agent frameworks.
 ---
 
 # NeatLogs — Agent Skill
 
 NeatLogs auto-instruments LLM calls, agent frameworks, and custom code. The small public API most integrations need:
-`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `identify()`, `inject_trace_context()`, `extract_trace_context()`, `SystemPromptTemplate`, `UserPromptTemplate`, `bind_templates()`, `register_crewai_task()`.
+`init()`, `flush()`, `shutdown()`, `@span()`, `trace()`, `identify()`, `inject_trace_context()`, and `extract_trace_context()`.
 
 ---
 
@@ -46,10 +46,11 @@ Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 
 1. **Import order matters**: `neatlogs.init()` MUST be called **before** importing any LLM libraries for auto-instrumentation patching to work. If the project uses `dotenv` / `load_dotenv()`, call it **before** `neatlogs.init()` so `NEATLOGS_API_KEY` from `.env` is available. Correct order: `import neatlogs` → `load_dotenv()` → `neatlogs.init()` → LLM library imports.
 2. **Scripts**: end with `neatlogs.flush()` then `neatlogs.shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` / `shutdown()` per request — see [Long-Running Servers](#long-running-servers) below.
-3. **`@span` for custom code**, **`trace()` for prompt templates** — use `@span(kind="...")` to decorate orchestration functions, use `with neatlogs.trace(kind="LLM", system_prompt_template=..., user_prompt_template=...)` to attach prompt templates to LLM calls.
-4. **Prefer auto-instrumentation** (`instrumentations=["openai"]`) over manual wrapping when a supported library is available.
+3. **One capture owner per operation** — wrappers, callback handlers, hooks, processors, native telemetry, and provider instrumentors own the spans they capture. Use `@span` for your own orchestration. Use manual `trace(kind="LLM")` only when no supported capture layer owns the LLM call.
+4. **Prefer the framework/provider-specific integration** over manual instrumentation. Never combine two capture layers for the same operation.
 5. **Init is single-shot**: `neatlogs.init()` configures the global telemetry provider. Calling it again is a no-op — it will NOT switch projects, even with a different `api_key`/`workflow_name`. If you need to reinitialize the SAME project, call `neatlogs.shutdown()` first (rare). If the need is a genuinely DIFFERENT project (different API key) from the same process, that's not a second `init()` at all — see [Multiple Projects](#multiple-projects-secondary-clients) below.
-6. **Read reference docs** before implementing — NeatLogs updates frequently.
+6. **Managed endpoint is automatic**: omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already exports to `https://ingest.neatlogs.com`. Preserve an explicit endpoint only for a confirmed self-hosted deployment.
+7. **Read reference docs** before implementing — NeatLogs updates frequently.
 
 ### Transport selection
 
@@ -59,41 +60,23 @@ Use this SDK for Python. Neatlogs also has SDKs for TypeScript/Node.js and Go. F
 
 ## Quick Start
 
-End-to-end example showing auto-instrumentation + `@span` decorators + `trace()` with prompt templates:
+End-to-end example showing a provider wrapper plus a custom orchestration span:
 
 ```python
 import neatlogs
-from neatlogs import SystemPromptTemplate, UserPromptTemplate
 
-neatlogs.init(
-    api_key="your-api-key",       # Get from https://app.neatlogs.com/settings/api-keys (or set NEATLOGS_API_KEY env var)
-    workflow_name="my-app",
-    instrumentations=["openai"],
-)
+neatlogs.init(api_key="your-api-key", workflow_name="my-app")
 
-# Import the LLM library AFTER init() so auto-instrumentation takes effect.
 from openai import OpenAI
-
-client = OpenAI()
-
-sys_tpl = SystemPromptTemplate([
-    {"role": "system", "content": "You are a helpful {{role}} assistant."}
-])
-user_tpl = UserPromptTemplate([
-    {"role": "user", "content": "{{query}}"}
-])
+client = neatlogs.wrap(OpenAI())
 
 
 @neatlogs.span(kind="AGENT", name="researcher", role="Research Analyst")
 def researcher(query: str) -> str:
-    with neatlogs.trace(
-        "llm_call",
-        kind="LLM",
-        system_prompt_template=sys_tpl,
-        user_prompt_template=user_tpl,
-    ):
-        msgs = sys_tpl.compile(role="research") + user_tpl.compile(query=query)
-        response = client.chat.completions.create(model="gpt-4o", messages=msgs)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": query}],
+    )
     return response.choices[0].message.content
 
 
@@ -108,9 +91,9 @@ if __name__ == "__main__":
     neatlogs.shutdown()
 ```
 
-This produces a trace with `WORKFLOW → AGENT → LLM` nesting, system + user prompt templates captured on the LLM span, and variable bindings visible in the UI.
+This produces `WORKFLOW → AGENT → LLM`. The wrapper owns the single canonical LLM span; no manual LLM decorator is added.
 
-> **On the `@span(kind="WORKFLOW")` root:** auto-instrumentation and `wrap()` now open a `WORKFLOW` root automatically, so a single instrumented LLM call renders on its own — the decorator is **not** required just to make a trace appear. Add `@span(kind="WORKFLOW")` (or `AGENT`/`CHAIN`) when you want to **group** several calls and your own functions under one named root, as in this multi-step example. If a root is already active, the automatic one steps aside (no double root).
+> **On the `@span(kind="WORKFLOW")` root:** auto-instrumentation and `wrap()` now open a `WORKFLOW` root automatically, so a single instrumented LLM call renders on its own — the decorator is **not** required just to make a trace appear. Add `@span(kind="WORKFLOW")` (or `AGENT`/`CHAIN`) when the function owns a real request, job, agent loop, or pipeline stage with meaningful pre/post work or multiple captured children, as in this multi-step example. If a root is already active, the automatic one steps aside (no double root).
 
 ---
 
@@ -222,11 +205,19 @@ def search(query: str) -> str:
 
 1. **Assess**: Detect what LLM providers / frameworks the project uses.
 2. **Instrument**: Pick the right approach:
-   - **Auto-instrumentation** for LLM providers → add the key to `instrumentations=[]`
+   - The provider/framework-specific wrapper, callback handler, hook, processor, native telemetry, or provider instrumentor
    - **`@span` decorators** for your own orchestration functions
-   - **`trace()`** for prompt template tracking on LLM calls, and for direct-API spans (`RERANKER`, `VECTOR_STORE`, `LLM`) when you don't go through an instrumented SDK
+   - **`trace()`** for custom direct-API spans (`RERANKER`, `VECTOR_STORE`, or an LLM call with no supported capture owner)
 3. **Init**: Add `neatlogs.init()` **BEFORE** any LLM library imports with the correct `instrumentations=[...]` list. If the project uses `load_dotenv()`, call it before `init()`.
-4. **Verify**: Check the NeatLogs dashboard for incoming traces. Use `debug=True` in `init()` to confirm each instrumentor loaded (prints `✅ Instrumented …` lines).
+4. **Verify**: run existing tests/import checks, restart long-running processes, exercise the real instrumented path, and confirm a new dashboard trace with one canonical span per operation.
+
+## Completion gate
+
+- Show progress for install, edits, checks, restart, runtime verification, and platform confirmation; never print secrets.
+- This skill does not grant platform access. Immediately before exercising the real path, record the current UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; do not make preliminary MCP discovery calls. While its `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected.
+- If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` (or `npx @neatlogs/wizard mcp --api-key <PROJECT_KEY>`) in the coding agent and store the project key as a client secret. Never print or request it in chat; leave verification incomplete if access cannot be established.
+- Run the project's existing tests plus its build/package/type checks, restart the long-running process, and exercise the actual user-facing instrumented path. Do not claim success from source inspection or an offline/no-export test. Inspect the full persisted span tree and canonical attributes, not only a trace-list summary or local debug output. Confirm the latest project trace is the fresh run, with one semantic span per operation and no duplicates.
+- If live execution or ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ---
 
@@ -235,7 +226,6 @@ def search(query: str) -> str:
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `api_key` | `str` | `None` | API key (or set `NEATLOGS_API_KEY` env var). If neither is set, spans are created locally but **silently not exported** — no error is raised |
-| `endpoint` | `str` | `"https://ingest.neatlogs.com"` | Backend base URL. Trace export is normalized to `{base_url}/v1/traces` |
 | `workflow_name` | `str` | `None` | Name for this workflow / application |
 | `instrumentations` | `list[str]` | `None` | Libraries to auto-instrument (e.g. `["openai", "langchain"]`) |
 | `tags` | `list[str]` | `None` | Tags for filtering in dashboard |
@@ -336,7 +326,7 @@ Pass these string values in the `instrumentations=[]` list to `neatlogs.init()`.
 | `anthropic` | Anthropic | Tested |
 | `google_genai` | Google Generative AI (`google.genai`) | Tested. Client must be created **after** `init()` — see troubleshooting |
 | `azure_ai_inference` | Azure AI Inference | Tested for direct Azure AI Inference calls |
-| `litellm` | LiteLLM | Tested end-to-end with `gemini/*` + message-list templates |
+| `litellm` | LiteLLM | Tested end-to-end with `gemini/*` message lists |
 | `bedrock` | AWS Bedrock | Tested. `boto3>=1.42.11` |
 
 ### Agent Frameworks
@@ -375,10 +365,9 @@ The CrewAI hook patches `LLM.call` directly, independent of whether the model is
 For deep dives, see the companion reference files:
 
 - **Custom instrumentation** with decorators and traces → [`references/decorators-and-traces.md`](references/decorators-and-traces.md)
-- **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
 - **Troubleshooting** and common mistakes → [`references/troubleshooting.md`](references/troubleshooting.md)
-- **Multiple independent workflows in one codebase** (a copilot + a summarizer + a background job, each a distinct dashboard workflow) → use the `neatlogs-multi-workflow` skill. `init(workflow_name=...)` is process-wide/single-shot; give each feature its own `WORKFLOW` root and set `neatlogs.workflow_name` on it via `span.set_attribute(...)`.
+- **Multiple independent workflows in one codebase** (a copilot + a summarizer + a background job, each a distinct dashboard workflow) → use the `neatlogs-multi-workflow` skill. `init(workflow_name=...)` is process-wide/single-shot; give each feature its own `WORKFLOW` root and set the canonical per-root `neatlogs.workflow.name` attribute via `span.set_attribute(...)`.
 
 ---
 

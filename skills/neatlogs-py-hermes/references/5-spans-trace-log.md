@@ -15,11 +15,10 @@ import neatlogs
 
 @neatlogs.span(kind="WORKFLOW", name="research_session")
 def main():
-    with neatlogs.trace("research_session"):
-        for q in questions:
-            neatlogs.log("handling: {q}", q=q)
-            resp = agent.run_conversation(q)   # AGENT/LLM/TOOL nest under WORKFLOW
-            neatlogs.log("done")
+    for q in questions:
+        neatlogs.log("handling: {q}", q=q)
+        resp = agent.run_conversation(q)   # AGENT/LLM/TOOL nest under WORKFLOW
+        neatlogs.log("done")
 ```
 
 Hierarchy: `WORKFLOW(research_session) > AGENT(hermes.run_conversation) > LLM/TOOL`.
@@ -42,5 +41,5 @@ decorate it.
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps.
-- `neatlogs.trace("name")` — group operations / prompt templates.
+- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom operation needing direct canonical attributes or an extended kind; never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

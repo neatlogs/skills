@@ -13,11 +13,10 @@ agent = neatlogs.wrap(research_agent)
 
 @neatlogs.span(kind="WORKFLOW", name="research_session")
 def main():
-    with neatlogs.trace("research_session"):     # groups the turns / attaches templates
-        for q in questions:
-            neatlogs.log("running query: {q}", q=q)
-            result = agent.run_sync(q)           # AGENT/LLM/TOOL spans nest under WORKFLOW
-            neatlogs.log("done, length {n}", n=len(result.output))
+    for q in questions:
+        neatlogs.log("running query: {q}", q=q)
+        result = agent.run_sync(q)           # AGENT/LLM/TOOL spans nest under WORKFLOW
+        neatlogs.log("done, length {n}", n=len(result.output))
 ```
 
 Resulting hierarchy:
@@ -45,5 +44,5 @@ Rule of thumb: if removing the decorated function would lose a meaningful proces
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point (trace root).
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps. NOT a single agent call.
 - `@neatlogs.span(kind="TOOL"|"RETRIEVER"|...)` — your own discrete tool / retrieval functions not managed by the framework.
-- `neatlogs.trace("name")` — group multiple operations, or attach prompt templates.
+- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom semantic operation that needs direct attributes or an extended kind (`RERANKER`, `VECTOR_STORE`, `EVALUATOR`, raw `LLM`). Do not nest it inside an `@span` for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — record a step/event inside the current span.

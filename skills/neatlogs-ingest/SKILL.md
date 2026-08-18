@@ -22,3 +22,13 @@ Keep the endpoints distinct:
 Never send the nested HTTP-ingest JSON body to `/v1/traces`.
 
 For retrieval attributes set directly by the caller, emit `neatlogs.retriever.*`. OpenTelemetry-native sources may emit `gen_ai.retrieval.*`; Neatlogs maps those during ingestion. Do not emit the legacy `neatlogs.retrieval.*` namespace from new integrations.
+
+## Live completion gate (wizard or standalone coding agent)
+
+- Show concise, secret-free progress for transport selection, edits/configuration, validation/build, process restart, real-path exercise, and platform confirmation.
+- Run the project's existing checks and validate the outgoing payload/OTel configuration. Restart the application or Collector that loads the changed exporter settings.
+- Exercise the actual application behavior that should emit telemetry. With direct HTTP ingest, that behavior must submit one representative nested `/v1/trace` payload. With OTLP, it must create spans in the application and let the configured SDK exporter and, when present, Collector deliver them; do not replace this with a synthetic connectivity probe.
+- This skill does not grant platform access. Immediately before the real-path submission, record the current UTC timestamp. After submission, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; make no preliminary MCP discovery calls. While `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected.
+- If no Neatlogs platform MCP is connected, ask the user to configure `https://ingest.neatlogs.com/mcp` (or `npx @neatlogs/wizard mcp --api-key <PROJECT_KEY>`) in the coding agent, storing the project key as a client secret. Never print or request the key in chat. Leave verification incomplete until platform evidence is available.
+- Inspect the full persisted span tree and attributes. Confirm the latest project trace is the fresh submission; a trace-list summary, local serialization check, or successful HTTP connection alone is insufficient.
+- If build, restart, exercise, or live platform confirmation cannot be completed, state the exact blocker and leave setup explicitly incomplete.

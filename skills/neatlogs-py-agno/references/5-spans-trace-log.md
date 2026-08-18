@@ -13,11 +13,10 @@ agent = neatlogs.wrap(support_agent)
 
 @neatlogs.span(kind="WORKFLOW", name="support_session")
 def main():
-    with neatlogs.trace("support_session"):
-        for q in questions:
-            neatlogs.log("handling: {q}", q=q)
-            resp = agent.run(q)          # AGENT/LLM/TOOL spans nest under WORKFLOW
-            neatlogs.log("done")
+    for q in questions:
+        neatlogs.log("handling: {q}", q=q)
+        resp = agent.run(q)          # AGENT/LLM/TOOL spans nest under WORKFLOW
+        neatlogs.log("done")
 ```
 
 Hierarchy: `WORKFLOW(support_session) > AGENT(agno.agent.run) > LLM/TOOL`.
@@ -38,5 +37,5 @@ If the function is a one-line pass-through to `agent.run(...)`, don't decorate i
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps, not a single agent call.
-- `neatlogs.trace("name")` — group operations / prompt templates.
+- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom operation needing direct canonical attributes or an extended kind; never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

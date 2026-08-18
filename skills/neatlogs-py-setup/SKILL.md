@@ -1,7 +1,6 @@
 ---
 name: neatlogs-py-setup
 description: Use when adding neatlogs observability to a Python LLM/agent project and no framework-specific neatlogs skill matches the stack — i.e. the generic fallback for instrumenting Python apps that call LLMs or run agents.
-compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
   language: python
@@ -37,7 +36,7 @@ Neatlogs instruments LLM/agent calls by **wrapping the client/agent** — not by
 - **Strands** — self-instruments via native OTel; `init()` alone captures it.
 - **`instrumentations=[...]`** — only for providers `wrap()` doesn't cover (Groq, Cohere, Bedrock, Mistral, Together, LiteLLM).
 
-Then layer your own `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` on top.
+Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custom operations. Never add a manual LLM span on top of a wrapper, callback handler, hook, processor, native framework telemetry, or provider instrumentor.
 
 ## Steps
 
@@ -46,7 +45,7 @@ Then layer your own `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` on top.
 2. **Add init()** → `references/2-add-init.md`
 3. **Set environment variables** → `references/3-set-env.md`
 4. **Identify and decorate orchestration functions** → `references/4-decorate-functions.md`
-5. **Wrap LLM calls with trace()** → `references/5-wrap-llm-calls.md`
+5. **Verify exactly one capture owner per LLM call** → `references/5-wrap-llm-calls.md`
 6. **Decorate tool functions** → `references/6-decorate-tools.md`
 7. **Add flush/shutdown** → `references/7-flush-shutdown.md`
 
@@ -56,8 +55,18 @@ Then layer your own `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` on top.
 - `neatlogs.init()` MUST execute BEFORE any LLM library imports and BEFORE the client/agent is constructed/wrapped.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
+- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
 - `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`, `@tool`) — closest to `def`.
 - Minimal edits only. Add wrap()/handler/decorators + imports. Do not reformat, add comments, or refactor.
+
+## Live completion gate (wizard or standalone coding agent)
+
+This skill does not grant platform access. Immediately before exercising the real path, record the current UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; do not make preliminary MCP discovery calls. While its `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat, and leave verification incomplete.
+
+- Print concise user-visible progress before and after install, edits, dependency/import checks, restart, runtime verification, and platform confirmation. Never print secrets.
+- Run the project's existing tests plus its build/package/type checks after editing. Restart the long-running process so startup instrumentation is actually loaded.
+- Exercise the actual user-facing instrumented path. Inspect the full persisted span tree and attributes, not only a trace-list summary or local debug output. Confirm the latest project trace is the fresh run, with one canonical span per operation and no duplicates. An offline/no-export verifier is insufficient by itself.
+- Do not claim completion until all applicable checks pass. If runtime or ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ## Reference (for decision-making during steps 4-6)
 

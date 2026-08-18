@@ -76,4 +76,6 @@ Do NOT flush/shutdown per request — `init()` runs once in `register()`. The SI
 - [ ] `instrumentation.ts` calls `init()` inside `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via a DYNAMIC `await import("neatlogs")` (NOT a top-level import). ← the key requirement
 - [ ] `experimental.instrumentationHook: true` in `next.config` (Next 13/14 only; default in 15+).
 - [ ] Every route/server action imports AI SDK functions from the wrapped module, not `"ai"`.
-- [ ] Server boots without `Can't resolve 'crypto'`; hitting a route produces spans. (If a route still errors, add `serverExternalPackages` per Step 2.)
+- [ ] Run the repository's package-manager build command after editing and fix instrumentation-related build/type errors.
+- [ ] Stop the old Next.js process and start a fresh process; hot reload does not prove a newly-added startup hook loaded. Rebuild/redeploy production.
+- [ ] Exercise the actual wrapped AI SDK route/action and confirm a new trace reaches the target project. (If it still errors, add `serverExternalPackages` per Step 2.)

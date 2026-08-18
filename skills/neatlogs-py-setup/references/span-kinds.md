@@ -1,5 +1,7 @@
 # Span Kinds Reference
 
+Supported wrappers, handlers, hooks, processors, and native integrations own the semantic spans they capture. The manual non-root examples below are only for unsupported/raw/custom operations and assume the real application path already has an active parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` root. Do not add a placeholder root around a lone supported call; supported capture layers self-root.
+
 ## WORKFLOW
 Top-level entry that orchestrates the full pipeline. One per program/request.
 ```python
@@ -40,7 +42,9 @@ with neatlogs.trace("vector_search", kind="RETRIEVER") as span:
     span.set_attribute("neatlogs.retriever.query", query)
     span.set_attribute("neatlogs.retriever.top_k", top_k)
     results = do_search(query, top_k)                       # the existing call
-    span.set_attribute("neatlogs.retriever.documents", json.dumps(results))
+    for i, document in enumerate(results):
+        span.set_attribute(f"neatlogs.retriever.documents.{i}", json.dumps(document))
+    span.set_attribute("neatlogs.retriever.output", json.dumps(results))
 ```
 
 ## RERANKER
@@ -50,9 +54,25 @@ with neatlogs.trace("rerank", kind="RERANKER") as span:
     span.set_attribute("neatlogs.reranker.model_name", model)
     span.set_attribute("neatlogs.reranker.query", query)
     span.set_attribute("neatlogs.reranker.top_k", top_n)
-    span.set_attribute("neatlogs.reranker.input_documents", json.dumps(documents))
+    for i, document in enumerate(documents):
+        span.set_attribute(f"neatlogs.reranker.input_documents.{i}", json.dumps(document))
     reranked = do_rerank(query, documents, top_n)           # the existing call
-    span.set_attribute("neatlogs.reranker.output_documents", json.dumps(reranked))
+    for i, document in enumerate(reranked):
+        span.set_attribute(f"neatlogs.reranker.output_documents.{i}", json.dumps(document))
+    span.set_attribute("neatlogs.reranker.output", json.dumps(reranked))
+```
+
+## VECTOR_STORE
+Use for vector-database writes and index management; vector search is a RETRIEVER.
+```python
+with neatlogs.trace("upsert_documents", kind="VECTOR_STORE") as span:
+    span.set_attribute("neatlogs.db.system", "custom_vector_db")
+    span.set_attribute("neatlogs.db.operation", "upsert")
+    span.set_attribute("neatlogs.db.collection_name", collection_name)
+    span.set_attribute("neatlogs.vectordb.index_name", index_name)
+    span.set_attribute("neatlogs.vector_store.input", json.dumps(documents))
+    result = store.upsert(documents)
+    span.set_attribute("neatlogs.vector_store.output", json.dumps(result))
 ```
 
 ## EMBEDDING
@@ -61,27 +81,37 @@ Text → vector (`.embeddings.create`, `embed_documents`, titan-embed, `invoke_m
 @neatlogs.span(kind="EMBEDDING")
 def embed_texts(texts): ...
 ```
-Raw-API form (set attrs by hand — canonical keys: `text` is the input, `token_count`, `model_name`; the SDK strips the raw vector from the trace view, so don't bother serializing it):
+Raw-API form (set canonical attributes by hand; record the vector only when its size and data policy permit):
 ```python
 with neatlogs.trace("embed", kind="EMBEDDING") as span:
     span.set_attribute("neatlogs.embedding.model_name", model)
     span.set_attribute("neatlogs.embedding.text", text)
     vector = do_embed(text)                                 # the existing call
     span.set_attribute("neatlogs.embedding.token_count", token_count)
+    span.set_attribute("neatlogs.embedding.vector", vector)
+    span.set_attribute("neatlogs.embedding.output", json.dumps({"dimensions": len(vector)}))
 ```
 
 ## GUARDRAIL
 Validates / filters / scores / sanitizes content (PII check, safety filter, output validator, moderation, a classifier scoring a span).
 ```python
 with neatlogs.trace("safety_check", kind="GUARDRAIL") as span:
-    span.set_attribute("neatlogs.guardrail.name", "safety")
     span.set_attribute("neatlogs.guardrail.input", text)
     passed = run_check(text)                                # the existing call
     span.set_attribute("neatlogs.guardrail.passed", passed)
-    span.set_attribute("neatlogs.guardrail.triggered", not passed)
+    span.set_attribute("neatlogs.guardrail.output", json.dumps({"passed": passed}))
 ```
 
-> **Attribute keys:** any attribute you set whose name starts with `neatlogs.` is passed through to the backend verbatim — so the `neatlogs.<kind>.*` keys above land as-is. The canonical/mapped names live in the SDK's `neatlogs/config/attribute-mapping.json`: `neatlogs.retriever.*` (singular — `query`/`top_k`/`documents`), `neatlogs.reranker.*` (`model_name`/`query`/`top_k`/`input_documents`/`output_documents`), `neatlogs.embedding.*` (`model_name`/`text`/`token_count`/`vector` — the raw vector is stripped from the trace view), `neatlogs.llm.*`. (GUARDRAIL has no dedicated mapped keys yet; the `neatlogs.guardrail.*` keys still pass through.) Only set these by hand for raw-HTTP / `invoke_model` / custom calls — a wrapped SDK client or framework handler captures them automatically (don't double-instrument).
+## EVALUATOR
+```python
+with neatlogs.trace("answer_quality", kind="EVALUATOR") as span:
+    span.set_attribute("neatlogs.evaluator.input", json.dumps({"answer": answer, "reference": reference}))
+    score = evaluate(answer, reference)
+    span.set_attribute("neatlogs.evaluator.output", json.dumps({"score": score}))
+    span.set_attribute("neatlogs.metadata", json.dumps({"evaluator": "answer_quality"}))
+```
+
+> **Exact attribute keys:** LLM uses `neatlogs.llm.provider`, `neatlogs.llm.model_name`, `neatlogs.llm.input_messages.{i}.role`, `neatlogs.llm.input_messages.{i}.content`, `neatlogs.llm.output_messages.{i}.role`, `neatlogs.llm.output_messages.{i}.content`, `neatlogs.llm.token_count.prompt`, `neatlogs.llm.token_count.completion`, `neatlogs.llm.token_count.total`, and the reported `neatlogs.llm.finish_reason`/`neatlogs.llm.stop_reason`. Retriever uses `neatlogs.retriever.query`, `neatlogs.retriever.top_k`, `neatlogs.retriever.documents.{i}`, `neatlogs.retriever.input`, and `neatlogs.retriever.output`. Reranker uses `neatlogs.reranker.model_name`, `neatlogs.reranker.query`, `neatlogs.reranker.top_k`, `neatlogs.reranker.input_documents.{i}`, `neatlogs.reranker.output_documents.{i}`, `neatlogs.reranker.input`, and `neatlogs.reranker.output`. Vector DB uses `neatlogs.db.system`, `neatlogs.db.operation`, `neatlogs.db.collection_name`, `neatlogs.vectordb.index_name`, `neatlogs.vectordb.embedding_model`, `neatlogs.vectordb.vector_dimension`, `neatlogs.vectordb.similarity_algorithm`, `neatlogs.vector_store.input`, and `neatlogs.vector_store.output`. Embedding uses `neatlogs.embedding.model_name`, `neatlogs.embedding.text`, `neatlogs.embedding.token_count`, `neatlogs.embedding.vector`, `neatlogs.embedding.invocation_parameters`, `neatlogs.embedding.input`, and `neatlogs.embedding.output`. Guardrail uses `neatlogs.guardrail.input`, `neatlogs.guardrail.output`, `neatlogs.guardrail.passed`, and `neatlogs.guardrail.score`. Evaluator uses `neatlogs.evaluator.input`/`neatlogs.evaluator.output` plus JSON `neatlogs.metadata` for its name, criteria, and score. Only set these by hand for raw/custom operations; a wrapper, handler, hook, processor, native integration, or provider instrumentor owns supported calls.
 
 ## MCP_TOOL
 MCP protocol tool handlers.

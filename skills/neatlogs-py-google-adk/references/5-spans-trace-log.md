@@ -13,12 +13,11 @@ from google.genai import types
 @neatlogs.span(kind="WORKFLOW", name="session")
 async def main():
     runner = neatlogs.wrap(InMemoryRunner(agent=agent, app_name="app"))
-    with neatlogs.trace("session"):
-        for text in questions:
-            neatlogs.log("query: {q}", q=text)
-            message = types.Content(role="user", parts=[types.Part(text=text)])
-            async for event in runner.run_async(user_id="user-1", session_id=sid, new_message=message):
-                ...                      # runner span nests under WORKFLOW
+    for text in questions:
+        neatlogs.log("query: {q}", q=text)
+        message = types.Content(role="user", parts=[types.Part(text=text)])
+        async for event in runner.run_async(user_id="user-1", session_id=sid, new_message=message):
+            ...                      # runner span nests under WORKFLOW
 ```
 
 Hierarchy: `WORKFLOW(session) > WORKFLOW(google_adk.runner.run_async) > AGENT/LLM/TOOL`.
@@ -40,5 +39,5 @@ If the function only builds a message and drains the event stream, don't wrap it
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps, not a single runner call.
-- `neatlogs.trace("name")` — group operations / prompt templates.
+- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom operation needing direct canonical attributes or an extended kind; never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

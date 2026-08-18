@@ -36,7 +36,7 @@ For each candidate you found, answer two questions with evidence.
 
 **(b) How are the pieces wired together?** Trace the data flow, not just the file list:
 - Which agent owns which tools? (look at the `tools=` list / registration)
-- What feeds each LLM call — a prompt template, retrieved docs, tool results, raw user input?
+- What feeds each LLM call — constructed messages, retrieved docs, tool results, raw user input?
 - Which function is the outermost orchestrator that everything nests under?
 - Where does control loop (agent → tool → agent again)?
 
@@ -75,7 +75,7 @@ Produce a short table that drives the rest of the setup. One row per component. 
 |---|---|---|---|
 | `app/run.py:18 chat()` | WORKFLOW | calls `agent.run`; entry point | `@neatlogs.span(kind="WORKFLOW")` (step 4) |
 | `agents/research.py:30` | AGENT | owns `web_search`, `summarize` tools | per framework skill / step 4 |
-| `clients/llm.py:55` | LLM call | fed by prompt template + retrieved docs | `with neatlogs.trace("llm_call", kind="LLM")` (step 5) |
+| `clients/llm.py:55` | LLM call | fed by prompt + retrieved docs | use its wrapper/handler/hook/processor exactly once; manual LLM trace only if unsupported/raw (step 5) |
 | `tools/search.py:12` | TOOL → RETRIEVER | queries Pinecone, returns docs | `@neatlogs.span(kind="RETRIEVER")` (step 6) |
 
 The "How to instrument" column points at the concrete step/reference: WORKFLOW/AGENT/CHAIN/TOOL/RETRIEVER decorators (`references/4-decorate-functions.md`, `6-decorate-tools.md`, `span-kinds.md`), LLM calls (`references/5-wrap-llm-calls.md`, `llm-call-patterns.md`), and raw-HTTP LLM sites (`references/raw-http-llm-formats.md`). What a framework wrapper/handler already covers is in `references/auto-instrumented.md` — don't double-instrument those.

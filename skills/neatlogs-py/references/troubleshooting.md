@@ -59,7 +59,7 @@ If traces are not appearing in the NeatLogs dashboard, check these in order:
 4. **Is `NEATLOGS_API_KEY` set?** → No → Set it via env var or `api_key=` param. Without it, export is **silently disabled** with no error.
 5. **Library version too old for its instrumentor?** → Some OpenInference-based instrumentors require a minimum library version and **silently emit no spans** below it. Notably `instrumentations=["dspy"]` requires **DSPy ≥ 2.6.0**. Fix: upgrade the library, or use `neatlogs.wrap(client_or_module)` instead (the `wrap()` path has no version requirement).
 
-> **You do NOT need a manual `@span(kind="WORKFLOW")` for a single instrumented call to render.** `neatlogs.wrap()` and auto-instrumentation open a `WORKFLOW` root automatically for an otherwise-parentless provider/LLM call. A manual root is for **grouping** several calls (and your own `@span` functions) under one trace — its absence is never why a single wrapped call's trace is missing. (Note: this is specific to `wrap()`/auto-instrumentation; spans you create yourself with `@span`/`trace()` still need a parent, and framework handlers/processors create their own root.)
+> **You do NOT need a manual `@span(kind="WORKFLOW")` for a single instrumented call to render.** `neatlogs.wrap()` and auto-instrumentation open a `WORKFLOW` root automatically for an otherwise-parentless provider/LLM call. Add a manual root only when the app-owned request, job, agent loop, or pipeline stage performs meaningful pre/post work or coordinates multiple captured children; its absence is never why a single wrapped call's trace is missing. (Note: this is specific to `wrap()`/auto-instrumentation; spans you create yourself with `@span`/`trace()` still need a parent, and framework handlers/processors create their own root.)
 
 ---
 
@@ -153,7 +153,7 @@ asyncio.run(main())
 | Calling `.compile()` outside `trace()` context | Variable bindings won't be captured on the span | Move `.compile()` inside the `with trace(...)` block |
 | Not listing all providers in `instrumentations` | Some LLM calls won't be traced | Add all providers your code uses (see §4 for CrewAI) |
 | Mixing `mask` on `init()` and per-span | Per-span mask takes precedence over the global mask for that span | Expected behavior, not a bug |
-| Setting `input.value` as a JSON blob on an auto-instrumented LLM span | Dashboard won't render structured prompt views | Use `SystemPromptTemplate` / `UserPromptTemplate` and call `.compile()` inside `trace(kind="LLM")` |
+| Adding `trace(kind="LLM")` around an automatically captured call | Redundant LLM instrumentation | Remove the manual trace; the wrapper/handler/hook/processor/instrumentor owns the canonical span |
 | Using `tool_name` as a manual span attribute with `trace()` | The decorator already wires this — `@span(kind="TOOL", tool_name=...)` sets `tool.name` on the span automatically | Use the `@span(kind="TOOL", tool_name="my_tool")` form instead of `trace()` + `set_attribute` |
 
 ---

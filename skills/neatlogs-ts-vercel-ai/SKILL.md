@@ -1,7 +1,6 @@
 ---
 name: neatlogs-ts-vercel-ai
 description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses the Vercel AI SDK (depends on the `ai` package, calls `generateText`/`streamText`).
-compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
   language: typescript
@@ -38,13 +37,24 @@ If the project is a **Next.js** app (it has `next.config.*` / `app/` route handl
 - `await init(...)` runs first (registers the TracerProvider). Then `wrapAISDK(ai)`.
 - NEVER pass `instrumentations: ['ai_sdk']` (or any provider key) — `init()` **throws**. The wrapper is the instrumentation. A provider SDK called DIRECTLY outside the AI SDK needs its own helper (`wrapOpenAI`, `wrapAnthropic`, …).
 - Replace direct `ai` calls with the WRAPPED equivalents: destructure `generateText`/`streamText`/etc. from `wrapAISDK(ai)` and call those. Don't leave bare `import { generateText } from 'ai'` call sites — they won't be traced.
-- Do NOT also wrap wrapped calls in `span()`/`trace()` — the wrapper already opens the parent span. (A `span()` WORKFLOW is fine to group multiple AI-SDK calls under one trace, but never wrap a single wrapped call.)
+- Do NOT also wrap wrapped calls in `span()`/`trace()` — the wrapper already opens the parent span. Add a `WORKFLOW` only when the application entry point owns a real multi-step request/job; keep each wrapped AI-SDK call as its canonical child.
 - The AI SDK supports both v3–v6; `wrapAISDK` is version-agnostic.
 - Never hardcode API keys — use `process.env`.
+- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+
+## Live completion gate (wizard or standalone coding agent)
+
+This skill does not grant platform access. Immediately before exercising the real path, record the current UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; do not make preliminary MCP discovery calls. While its `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat, and leave verification incomplete.
+
+- Print concise user-visible progress before and after install, code changes, build, restart, runtime verification, and platform confirmation. Never print secrets.
+- Run the project's existing build/typecheck/test commands with its detected package manager. Source inspection alone is not verification.
+- For servers and startup hooks, build and start a fresh process after instrumentation changes, then exercise the actual instrumented route/action/entry point.
+- Run a safe bounded verification through the real instrumented entry point. Inspect the full persisted span tree and attributes, not only a trace-list summary or local debug output. Confirm the latest project trace is the fresh run, with one canonical span per operation and no duplicate LLM/tool/agent spans. An offline/no-export verifier is insufficient by itself.
+- Do not claim completion until all applicable checks pass. If runtime or ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ## Reference
 
 - **Next.js setup (serverExternalPackages + instrumentation.ts)** → `references/nextjs.md`
 - Sessions & end-users (per-turn `identify()`) → `references/sessions-and-end-users.md`
-- Custom span()/trace() (for grouping) → `references/decorators-and-traces.md`
+- Custom span()/trace() (for real app-owned request/job orchestration) → `references/decorators-and-traces.md`
 - Troubleshooting → `references/troubleshooting.md`

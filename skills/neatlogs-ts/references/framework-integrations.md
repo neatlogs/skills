@@ -40,34 +40,9 @@ const pipeline = span({ kind: 'WORKFLOW' }, async (query: string) => {
 });
 ```
 
-### 1c. Wrapper + `trace()` + `PromptTemplate`
+### 1c. Manual LLM spans only when no integration owns the call
 
-For tracking prompt templates and variables in the dashboard. Wrap LLM calls in `trace()` and pass `PromptTemplate` instances.
-
-```typescript
-import { init, trace, PromptTemplate, UserPromptTemplate } from 'neatlogs';
-
-await init({ apiKey: process.env.NEATLOGS_API_KEY });
-
-const sysTpl = new PromptTemplate('You are a {{role}} assistant.');
-const userTpl = new UserPromptTemplate('{{query}}');
-
-await trace(
-  { name: 'llm_call', kind: 'LLM', promptTemplate: sysTpl, userPromptTemplate: userTpl },
-  async () => {
-    const sysMsg = sysTpl.compile({ role: 'research' }) as string;
-    const userMsg = userTpl.compile({ query }) as string;
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: sysMsg },
-        { role: 'user', content: userMsg },
-      ],
-    });
-    return response.choices[0].message.content;
-  },
-);
-```
+Do not wrap provider/framework calls in `trace({ kind: 'LLM' })` after applying their wrapper, handler, hook, or processor. That capture layer already owns the canonical LLM span. Use a manual LLM trace only for an unsupported SDK or raw HTTP request, and populate its model, input, output, usage, status, and errors yourself.
 
 ---
 
@@ -79,7 +54,7 @@ await trace(
 - **Auto-roots**: yes — a lone wrapped call opens its own `WORKFLOW` root
 
 ```typescript
-import { init, wrapOpenAI, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
 import { OpenAI } from 'openai';
 
 await init({
@@ -89,25 +64,12 @@ await init({
 
 const client = wrapOpenAI(new OpenAI());
 
-const sysTpl = new PromptTemplate('You are a helpful assistant specializing in {{domain}}.');
-const userTpl = new UserPromptTemplate('Question: {{query}}');
-
 const run = span({ kind: 'WORKFLOW' }, async (query: string) => {
-  return await trace(
-    { name: 'llm_call', kind: 'LLM', promptTemplate: sysTpl, userPromptTemplate: userTpl },
-    async () => {
-      const sysMsg = sysTpl.compile({ domain: 'science' }) as string;
-      const userMsg = userTpl.compile({ query }) as string;
-      const response = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: sysMsg },
-          { role: 'user', content: userMsg },
-        ],
-      });
-      return response.choices[0].message.content;
-    },
-  );
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [{ role: 'user', content: query }],
+  });
+  return response.choices[0].message.content;
 });
 
 await run('Explain quantum computing');
@@ -124,7 +86,7 @@ await shutdown();
 - **Auto-roots**: yes
 
 ```typescript
-import { init, wrapAnthropic, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
+import { init, wrapAnthropic, span, flush, shutdown } from 'neatlogs';
 import { Anthropic } from '@anthropic-ai/sdk';
 
 await init({
@@ -134,26 +96,16 @@ await init({
 
 const client = wrapAnthropic(new Anthropic());
 
-const sysTpl = new PromptTemplate('You are a market analysis expert for {{industry}}.');
-const userTpl = new UserPromptTemplate('Analyze: {{query}}');
-
 const analyst = span(
   { kind: 'AGENT', name: 'analyst' },
   async (query: string) => {
-    return await trace(
-      { name: 'llm_call', kind: 'LLM', promptTemplate: sysTpl, userPromptTemplate: userTpl },
-      async () => {
-        const sysStr = sysTpl.compile({ industry: 'technology' }) as string;
-        const userStr = userTpl.compile({ query }) as string;
-        const response = await client.messages.create({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1024,
-          system: sysStr,
-          messages: [{ role: 'user', content: userStr }],
-        });
-        return response.content[0].text;
-      },
-    );
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: 'You are a market analysis expert.',
+      messages: [{ role: 'user', content: query }],
+    });
+    return response.content[0].text;
   },
 );
 

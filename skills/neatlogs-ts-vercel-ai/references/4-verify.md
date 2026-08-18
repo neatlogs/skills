@@ -25,7 +25,7 @@ await span({ kind: "LLM" }, async () => generateText({ model, prompt }));
 await generateText({ model, prompt });
 ```
 
-3. **Grouping is OK.** A single `span({ kind:"WORKFLOW" }, ...)` wrapping a function that makes SEVERAL wrapped AI-SDK calls is fine — it groups them under one trace root. Just don't wrap an individual call.
+3. **App-owned orchestration is valid.** Add one `WORKFLOW` only when the user-facing request/job performs meaningful pre/post work or coordinates multiple wrapped AI-SDK calls. The wrapped calls remain canonical children; never add a span around an individual call.
 
 ## Verify
 - [ ] Every AI SDK call site uses a `wrapAISDK(ai)` function (no bare `ai` imports being called).

@@ -1,6 +1,6 @@
 # LLM Call Patterns — How to Recognize Them
 
-Every LLM call in the project needs `with neatlogs.trace(kind="LLM")` + prompt templates, regardless of whether the containing function has `@span`. Use this reference to identify LLM calls across all supported libraries.
+Use this reference to identify LLM calls and then assign exactly one capture owner. Supported wrapper/instrumentor calls need no manual LLM trace. Only unsupported/raw calls need `neatlogs.trace(kind="LLM")`.
 
 ## OpenAI SDK (`openai`)
 
@@ -185,7 +185,7 @@ response = ollama.generate(model="llama3", prompt="...")
 ## How to Use This Reference
 
 When scanning a file for LLM calls:
-1. Look for any of the patterns above
-2. Each match needs `with neatlogs.trace(kind="LLM", system_prompt_template=..., user_prompt_template=...)` wrapping it
-3. Extract the messages/prompt into `SystemPromptTemplate` + `UserPromptTemplate`
-4. This applies even inside LangChain nodes — the auto-instrumentor captures the call metadata but NOT the prompt template structure for prompt management
+1. Identify the capture owner for each call: provider wrapper/instrumentor, framework handler/hook/processor, or none.
+2. If a supported capture owner exists, use it exactly once and do not add a manual LLM trace/decorator or rewrite prompts.
+3. If no capture owner exists (unsupported SDK/raw HTTP), add one manual LLM span and populate all canonical LLM attributes.
+4. Verify the runtime tree contains one LLM span per real model call.

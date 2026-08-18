@@ -1,7 +1,6 @@
 ---
 name: neatlogs-ts-langchain
 description: Use when adding neatlogs observability to a TypeScript/Node.js project that uses LangChain or LangGraph (depends on `@langchain/*` / `@langchain/langgraph`).
-compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
   language: typescript
@@ -60,7 +59,7 @@ await app.invoke(state, { callbacks: [handler] });               // graph level 
 1. **Install** → `references/1-install.md`
 2. **Add init()** → `references/2-add-init.md`
 3. **Set environment variables** → `references/3-set-env.md`
-4. **Add the WORKFLOW span + attach handler** → `references/4-add-workflow.md`
+4. **Attach the handler; optionally add an app-owned WORKFLOW** → `references/4-add-workflow.md`
 5. **Lifecycle (flush/shutdown)** → `references/5-lifecycle.md`
 
 ## Rules (apply to ALL steps)
@@ -68,14 +67,24 @@ await app.invoke(state, { callbacks: [handler] });               // graph level 
 - `await init(...)` runs once at startup. Import order does NOT matter — the handler binds to Neatlogs' private provider per call, so a static `import` of `@langchain/*` is fine (no dynamic `import()` needed).
 - NEVER pass `instrumentations: ['langchain']` to `init()` — it **throws**. The callback handler is the only path.
 - Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For plain LangChain (LCEL chains / bare model calls) attach per model/chain call. For LangGraph attach at the graph invocation (`app.invoke(..., { callbacks: [handler] })`), NOT the per-node `llm.invoke()`.
-- The ONLY manual span you add is `span({ kind:'WORKFLOW' })` on the user-facing entry that runs the chain/graph/agent.
+- The handler self-roots a parentless supported run. Add at most one app-owned `span({ kind:'WORKFLOW' })` only when the user-facing entry performs meaningful pre/post work or coordinates multiple runs.
 - NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced by the handler; manual wrapping duplicates.
 - All lifecycle calls are async. Never hardcode API keys — use `process.env`.
+- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+
+## Live completion gate (wizard or standalone coding agent)
+
+This skill does not grant platform access. Immediately before exercising the real path, record the current UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; do not make preliminary MCP discovery calls. While its `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat, and leave verification incomplete.
+
+- Print concise user-visible progress before and after install, code changes, build, restart, runtime verification, and platform confirmation. Never print secrets.
+- Run the project's existing build/typecheck/test commands with its detected package manager. Source inspection alone is not verification.
+- For servers and startup hooks, build and start a fresh process after instrumentation changes, then exercise the actual instrumented route/action/entry point.
+- Run a safe bounded verification through the real instrumented entry point. Inspect the full persisted span tree and attributes, not only a trace-list summary or local debug output. Confirm the latest project trace is the fresh run, with one canonical span per operation and no duplicate LLM/chain/node/tool spans. An offline/no-export verifier is insufficient by itself.
+- Do not claim completion until all applicable checks pass. If runtime or ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ## Reference
 
 - **Next.js setup (init via dynamic import in instrumentation.ts)** → `references/nextjs.md` — REQUIRED if the project is a Next.js app.
 - Custom span()/trace() (rare here) → `references/decorators-and-traces.md`
 - Sessions & end-users (per-turn `identify()` wrapper-only) → `references/sessions-and-end-users.md`
-- Prompt templates → `references/prompt-templates.md`
 - Troubleshooting → `references/troubleshooting.md`

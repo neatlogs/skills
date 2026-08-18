@@ -27,9 +27,9 @@ Once you've wrapped the client/agent (`neatlogs.wrap`), attached the LangChain h
 ### LangChain: what this means for you
 - Do NOT add `@neatlogs.span()` to any function with `@tool` from `langchain_core.tools`
 - Do NOT add `@neatlogs.span()` to graph node functions (planner_node, analyst_node)
-- DO still add `with neatlogs.trace("<name>", kind="LLM")` + prompt templates inside nodes (for prompt management) — `name` is the required first positional arg
+- Do NOT add a manual LLM trace or decorator inside nodes; the handler owns those LLM spans.
 - DO add `@neatlogs.span(kind="WORKFLOW")` on the top-level user-facing function that calls `graph.invoke()`
-- Attach the handler at the MODEL level inside nodes, NOT on `graph.invoke()` (avoids duplicates)
+- For LangGraph, attach the handler at the graph invocation, not per node. For plain LangChain, attach it to the model/chain invocation.
 
 ## `neatlogs.wrap(crew)` (CrewAI) covers:
 - `crew.kickoff()` → WORKFLOW span
@@ -79,13 +79,6 @@ If function has `@tool` / `@function_tool` from a framework → NEVER add `@span
 
 The dividing line is **meaningful work around the call**, not the presence of the call itself.
 
-## What IS still needed on auto-captured calls
+## No additional LLM span on auto-captured calls
 
-Even when a call is auto-captured, you should STILL wrap it with:
-```python
-with neatlogs.trace("name", kind="LLM",
-                    system_prompt_template=SYS_TPL,
-                    user_prompt_template=USER_TPL):
-```
-
-This captures the **prompt template structure** for the prompt management dashboard. The wrapper/handler/processor captures metadata (model, tokens, latency) but NOT template variables.
+Do not add `trace(kind="LLM")`, an LLM decorator, or another provider/framework integration around anything listed above. Extra metadata never justifies a duplicate LLM span.

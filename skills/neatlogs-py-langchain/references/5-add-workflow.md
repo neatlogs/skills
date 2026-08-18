@@ -1,8 +1,8 @@
-# Step 5: Add WORKFLOW Span to User-Facing Entry Point
+# Step 5: Optional App-Owned WORKFLOW Span
 
 ## Action
 
-Find the ONE function that the user calls to start the LangGraph/LangChain workflow. That function — and ONLY that function — gets `@neatlogs.span(kind="WORKFLOW")`.
+The handler self-roots a parentless supported chain/graph call. Add at most one `@neatlogs.span(kind="WORKFLOW")` to the user-facing entry only when that function owns meaningful pre/post work or coordinates multiple calls. A pass-through containing one supported invocation needs no manual root.
 
 ## How to Find It
 
@@ -51,11 +51,13 @@ def main():
 @app.post("/analyze")
 @neatlogs.span(kind="WORKFLOW", name="analyze_endpoint")
 async def analyze_endpoint(request: AnalyzeRequest):
+    validate_request(request)
     result = await graph.ainvoke({"messages": [HumanMessage(content=request.query)]}, config={"callbacks": [handler]})
+    await save_run_result(result)
     return {"result": result["messages"][-1].content}
 ```
 
-## Why Only ONE Decorator
+## Why At Most One Decorator
 
 The callback handler (Step 4) already creates spans for:
 - Every graph node execution
@@ -63,9 +65,7 @@ The callback handler (Step 4) already creates spans for:
 - Every tool call via ToolNode
 - Chain / LCEL execution
 
-The handler self-roots — a single instrumented call renders on its own, so a manual root isn't required just to make a trace appear. You add ONE `@span(kind="WORKFLOW")` at the top to:
-1. Group the whole multi-node operation under ONE trace (so the graph's nodes, LLM, and tool spans appear together rather than as separate per-call traces)
-2. Mark the beginning and end of the user-facing operation with a meaningful name
+The handler self-roots, and a graph-level callback already keeps its nodes, LLM calls, tools, and retrievers in one hierarchy. An app-owned outer `WORKFLOW` is useful only when the entry point itself is the operation being measured—for example, it validates input, runs retrieval before the graph, writes the result afterward, or coordinates more than one top-level run.
 
 ## Do NOT Decorate These
 
@@ -80,13 +80,12 @@ The handler self-roots — a single instrumented call renders on its own, so a m
 
 1. Find where `graph.invoke()` / `graph.ainvoke()` / `app.invoke()` is called
 2. Trace UP to the user-facing function that initiates this call
-3. Add `@neatlogs.span(kind="WORKFLOW", name="descriptive_name")` to that function
-4. Add `import neatlogs` to that file if not present
-5. That's it. ONE decorator total.
+3. If it owns the surrounding orchestration described above, add `@neatlogs.span(kind="WORKFLOW", name="descriptive_name")`; otherwise leave it undecorated
+4. Add `import neatlogs` to that file only if the decorator is used
 
 ## Verify BEFORE moving to step 6
 
-- Exactly ONE function has `@neatlogs.span(kind="WORKFLOW")`
-- That function is the user-facing entry point (click command, main(), route handler)
+- At most one function has `@neatlogs.span(kind="WORKFLOW")`; zero is correct for a single supported invocation
+- If present, that function is a real user-facing orchestrator (click command, main(), route handler), not a pass-through
 - NO graph node functions have any `@neatlogs.span()` or `@neatlogs.trace()` decorator on the `def` line
 - NO `@tool` functions have any neatlogs decorator

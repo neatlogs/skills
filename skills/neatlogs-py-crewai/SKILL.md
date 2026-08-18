@@ -1,7 +1,6 @@
 ---
 name: neatlogs-py-crewai
 description: Use when adding neatlogs observability to a Python project that uses CrewAI (imports `crewai`, builds a Crew/Flow with agents and tasks).
-compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
   language: python
@@ -46,13 +45,12 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 
 ## Tools are auto-traced — do NOT add manual tool spans
 
-`wrap()` traces tool calls on BOTH dispatch paths — `BaseTool.run` (for `BaseTool` subclasses) and `CrewStructuredTool.invoke` (for `@tool` function tools) — on every supported crewai version (0.130.x through 1.15.x). This is NOT version-dependent. Leave plain action tools undecorated: adding `@neatlogs.span` or a manual `trace(kind="TOOL")` inside a plain tool produces a DUPLICATE span. The only manual span is `trace(kind="RETRIEVER")` inside retrieval/embedding tools, to add `neatlogs.retriever.*` attributes. Step 7 covers this.
+`wrap()` traces tool calls on BOTH dispatch paths — `BaseTool.run` (for `BaseTool` subclasses) and `CrewStructuredTool.invoke` (for `@tool` function tools) — on every supported crewai version (0.130.x through 1.15.x). This is NOT version-dependent. Leave plain action tools undecorated: adding `@neatlogs.span` or a manual `trace(kind="TOOL")` inside a plain tool produces a DUPLICATE span. A tool body may contain a distinct custom operation the wrapper does not capture—for example, a `RETRIEVER` child for custom search or an `EMBEDDING` child for a custom embedder. Step 7 covers this.
 
 ## What you MUST do
 
 1. `crew = neatlogs.wrap(crew)` on the Crew/Flow/Agent instance before its run entrypoint (`kickoff` / `train` / `agent.kickoff` / …).
 2. (Recommended) Add `@neatlogs.span(kind="WORKFLOW")` on YOUR user-facing function that builds + kicks off the crew, so your orchestration code is the trace root and the crew nests under it.
-3. (Optional, for prompt management) attach templates to agents/tasks → `references/6-prompt-templates.md`.
 
 ## Steps
 
@@ -61,9 +59,8 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 3. **Set environment variables** → `references/3-set-env.md`
 4. **Wrap the Crew with neatlogs.wrap()** → `references/4-wrap-crew.md`
 5. **Add a WORKFLOW span on your entry point** → `references/5-add-workflow.md`
-6. **Attach prompt templates (optional)** → `references/6-prompt-templates.md`
-7. **Tools — auto-traced; what NOT to add** → `references/7-verify-tools.md`
-8. **Add flush/shutdown** → `references/8-flush-shutdown.md`
+6. **Tools — auto-traced; what NOT to add** → `references/7-verify-tools.md`
+7. **Add flush/shutdown** → `references/8-flush-shutdown.md`
 
 ## Rules (apply to ALL steps)
 
@@ -72,13 +69,21 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 - Instrument via `wrap(crew)`, not `instrumentations=[...]` — it captures agents/tasks/tools/LLM AND binds workflow metadata, and it is the only path that covers Flows / standalone Agents. (`instrumentations=["crewai"]` is a valid key that installs the same class hooks; if a project already has it, leave it — just add the `wrap()`.)
 - Wrap the Crew/Flow instance: `crew = neatlogs.wrap(crew)`. Returns the same instance.
 - Never hardcode API keys in source. Use `os.getenv()`.
+- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
 - Add imports ONLY for what a file uses:
-  - File calls `neatlogs.wrap(...)`/`neatlogs.span(...)`/`neatlogs.trace(...)`/`neatlogs.bind_templates(...)`/`neatlogs.register_crewai_task(...)` → add `import neatlogs`.
-  - File only defines template objects → add ONLY `from neatlogs import SystemPromptTemplate, UserPromptTemplate`. No bare `import neatlogs`.
+  - File calls `neatlogs.wrap(...)`/`neatlogs.span(...)`/`neatlogs.trace(...)` → add `import neatlogs`.
 - `@neatlogs.span()` goes BELOW framework decorators, closest to `def`.
 - Minimal edits only. Add wrap()/decorators + imports. Do not reformat or refactor.
 - NEVER add `@neatlogs.span()` to `@tool` functions, Agent definitions, or Task definitions — `wrap()` traces them.
-- NEVER add a manual `with neatlogs.trace(kind="TOOL")` inside a plain tool body — `wrap()` already emits a TOOL span, so this DUPLICATES it. The only in-tool span is `trace(kind="RETRIEVER")` for retrieval/embedding tools (Step 7).
+- NEVER add a manual `with neatlogs.trace(kind="TOOL")` inside a plain tool body — `wrap()` already emits a TOOL span, so this DUPLICATES it. Add a child semantic span only for a distinct unsupported/custom operation (`RETRIEVER` for search, `EMBEDDING` for embedding), never as another record of the tool itself (Step 7).
+
+## Live completion gate (wizard or standalone coding agent)
+
+This skill does not grant platform access. Immediately before exercising the real path, record the current UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; do not make preliminary MCP discovery calls. While its `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat, and leave verification incomplete.
+
+- Show user-visible progress for install, edits, checks, restart, runtime verification, and platform confirmation; never print secrets.
+- Run existing tests plus the project's build/package/type checks, restart the long-running process, and exercise the actual user-facing wrapped path.
+- Inspect the full persisted span tree and attributes, not only a trace-list summary or local debug output. Confirm the latest project trace is the fresh run, with one wrapper-owned hierarchy and no duplicate crew/task/agent/LLM/tool spans. Offline/no-export verification alone is insufficient. Otherwise report the exact blocker and leave the result incomplete.
 
 ## Reference
 

@@ -1,6 +1,6 @@
-# Step 4: Add the WORKFLOW Span + Attach the Handler
+# Step 4: Attach the Handler; Add a WORKFLOW Only for App Orchestration
 
-The handler traces chains, graph nodes, tools, retrievers, and LLM calls — but it doesn't create the trace root. Wrap the user-facing entry with `span({ kind:'WORKFLOW' }, fn)` and pass `{ callbacks: [handler] }` on LLM/chain invocations inside.
+The handler owns chains, graph nodes, tools, retrievers, and LLM calls and self-roots a parentless supported run. Always pass `{ callbacks: [handler] }` at the correct invocation boundary. Wrap the user-facing entry with `span({ kind:'WORKFLOW' }, fn)` only when that function owns meaningful pre/post work or coordinates multiple runs; do not add it around a single pass-through call just to make a trace render.
 
 ```typescript
 import { span, langchainHandler } from "neatlogs";
@@ -8,8 +8,11 @@ import { span, langchainHandler } from "neatlogs";
 const handler = langchainHandler();
 
 const runAgent = span({ kind: "WORKFLOW", name: "run_agent" }, async (query: string) => {
+  validateQuery(query); // real app-owned pre-processing
   const response = await llm.invoke(query, { callbacks: [handler] });
-  return response.content;
+  const answer = normalizeAnswer(response.content); // real app-owned post-processing
+  await saveAuditRecord({ query, answer });
+  return answer;
 });
 
 await runAgent("Explain black holes");
@@ -24,9 +27,13 @@ async function researchNode(state) {
   return { messages: [res] };
 }
 
-// Entry point — WORKFLOW span AND the handler go here:
+// App-owned entry point with real surrounding orchestration — optional WORKFLOW;
+// the handler still goes on the graph invocation:
 const run = span({ kind: "WORKFLOW", name: "run_graph" }, async (input) => {
-  return await compiledGraph.invoke(input, { callbacks: [handler] });
+  validateInput(input);
+  const result = await compiledGraph.invoke(input, { callbacks: [handler] });
+  await saveRunResult(result);
+  return result;
 });
 ```
 
@@ -41,7 +48,7 @@ const node = async (state) => ({ messages: [await llm.invoke(state.messages)] })
 ```
 
 ## Verify
-- [ ] Exactly one `span({ kind:"WORKFLOW" }, ...)` on the chain/graph/agent entry.
+- [ ] At most one app-owned `span({ kind:"WORKFLOW" }, ...)` on a real user-facing orchestrator; zero is correct for a single supported invocation.
 - [ ] Plain LangChain: `{ callbacks: [handler] }` on each model/chain invocation.
 - [ ] LangGraph: `{ callbacks: [handler] }` on the graph invocation (`app.invoke(...)`), NOT on per-node `llm.invoke()`.
 - [ ] No chain/node/tool/`llm.invoke()` wrapped in `span()`/`trace()`.

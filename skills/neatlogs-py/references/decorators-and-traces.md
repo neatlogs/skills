@@ -1,470 +1,167 @@
-# Decorators and Traces Reference
+# Manual Instrumentation — NeatLogs Python SDK
 
-Complete reference for the manual instrumentation APIs in the NeatLogs SDK.
+Manual instrumentation is for application-owned orchestration and operations that no supported integration captures. Choose the capture owner **per operation**. A provider wrapper may own an LLM call while the application still owns a custom tool, retriever, reranker, evaluator, or vector-store write.
 
----
+Never add a manual span of the same semantic kind around a call already captured by a wrapper, callback handler, hook, processor, native framework span, or provider instrumentor.
 
-## 1. `@neatlogs.span()` Decorator
+## Root requirement
 
-The primary manual instrumentation API for custom code. Wraps a function to create an OpenTelemetry span with NeatLogs-specific attributes.
-
-### Signature
+A completed trace must contain a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. Direct provider wrappers and supported framework integrations create an eligible root when needed. A standalone manual `LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, or `EVALUATOR` span does not; put it under a real orchestration root.
 
 ```python
-@neatlogs.span(
-    kind,                    # Required: span kind string
-    name=None,               # Optional: span name (defaults to function name)
-    description=None,        # Optional: span description (used as tool.description for TOOL/MCP_TOOL)
-    mask=None,               # Optional: per-span mask function
-    # Kind-specific:
-    role=None,               # AGENT: agent role (also sets agent.name)
-    goal=None,               # AGENT: agent goal
-    tool_name=None,          # TOOL / MCP_TOOL: tool identifier
-)
+@neatlogs.span(kind="WORKFLOW", name="answer_question")
+def answer_question(query: str):
+    docs = retrieve(query)  # custom RETRIEVER child
+    return wrapped_client.chat.completions.create(...)  # wrapper-owned LLM child
 ```
 
-### Valid Kinds
+Do not add an otherwise meaningless root around a single supported wrapped call merely to make it render; supported wrappers already self-root. The explicit root above is useful because the function genuinely orchestrates retrieval plus generation.
 
-`@span()` raises `ValueError` for any kind not in this set:
+## `@neatlogs.span()` for custom functions
 
-`WORKFLOW`, `AGENT`, `CHAIN`, `TOOL`, `RETRIEVER`, `EMBEDDING`, `GUARDRAIL`, `MCP_TOOL`
-
-> `RERANKER`, `VECTOR_STORE`, and `LLM` are not accepted by `@span()`. Create them via `trace()` — see §2.
-
-### When to Use Each Kind
-
-#### WORKFLOW
-
-Top-level entry point that orchestrates the full pipeline. Use this for the outermost function that ties together agents, tools, and processing steps.
+`@span()` accepts `WORKFLOW`, `AGENT`, `CHAIN`, `TOOL`, `RETRIEVER`, `EMBEDDING`, `GUARDRAIL`, and `MCP_TOOL`. It captures function input/output and errors. `RETRIEVER` also extracts a `query`/`question`/`text` argument and returned documents.
 
 ```python
-@neatlogs.span(kind="WORKFLOW")
-def run_research_pipeline(topic: str) -> str:
-    analysis = researcher_agent(topic)
-    report = writer_agent(analysis)
-    return report
+@neatlogs.span(kind="TOOL", tool_name="lookup_account")
+def lookup_account(account_id: str):
+    return database.lookup(account_id)
+
+@neatlogs.span(kind="RETRIEVER", name="search_knowledge_base")
+def search_knowledge_base(query: str, top_k: int = 5):
+    return custom_store.search(query, top_k=top_k)
 ```
 
-#### AGENT
+Use these only when the operation is not framework-owned. For example, `neatlogs.wrap(OpenAI())` captures OpenAI model and embedding calls and records tool-call requests on the LLM span, but it cannot execute the application function selected by that request. A custom dispatcher function still needs one `TOOL` span. An OpenAI Agents processor, by contrast, owns the framework's actual tool execution span too, so do not decorate that tool again.
 
-Function representing an AI agent with a specific role/goal. The `role` parameter sets `agent.name` on the span.
+Do not decorate a one-line pass-through to an automatically captured call. Use `WORKFLOW`, `AGENT`, or `CHAIN` only when the function genuinely performs that orchestration.
 
-```python
-@neatlogs.span(kind="AGENT", name="researcher", role="Research Analyst", goal="Find relevant information")
-def researcher_agent(topic: str) -> str:
-    # ... agent logic with LLM calls ...
-    return findings
-```
+## `neatlogs.trace()` for extended/custom kinds
 
-#### CHAIN
+Use `trace()` when the operation needs an extended kind that `@span()` rejects (`LLM`, `RERANKER`, `VECTOR_STORE`, `EVALUATOR`) or when canonical attributes must be set directly. It is the operation's sole span, not an extra layer inside an `@span` for the same operation.
 
-Sequential processing step. Use for any intermediate processing, transformation, or pipeline stage.
+The tables below list the canonical attributes to set when known. Always record the operation input/output. For a manual `trace()`, catch failures long enough to call `span.record_exception(exc)` and `span.set_status(Status(StatusCode.ERROR, str(exc)))`, then re-raise. Keep the context open through complete stream consumption.
 
-```python
-@neatlogs.span(kind="CHAIN")
-def process_documents(docs: list) -> list:
-    return [clean(d) for d in docs]
-```
+| Kind | Exact canonical attributes |
+|---|---|
+| `LLM` | Required when available: `neatlogs.llm.provider`, `neatlogs.llm.model_name`, `neatlogs.llm.input_messages.{i}.role`, `neatlogs.llm.input_messages.{i}.content`, `neatlogs.llm.output_messages.{i}.role`, `neatlogs.llm.output_messages.{i}.content`, `neatlogs.llm.token_count.prompt`, `neatlogs.llm.token_count.completion`, `neatlogs.llm.token_count.total`. Also report `neatlogs.llm.system`, `neatlogs.llm.finish_reason` or `neatlogs.llm.stop_reason`, `neatlogs.llm.is_streaming`, `neatlogs.llm.temperature`, `neatlogs.llm.top_p`, `neatlogs.llm.top_k`, `neatlogs.llm.max_tokens`, and `neatlogs.llm.invocation_parameters` when known. |
+| `RETRIEVER` | `neatlogs.retriever.query`, `neatlogs.retriever.top_k`, `neatlogs.retriever.documents.{i}`, `neatlogs.retriever.input`, `neatlogs.retriever.output` |
+| `RERANKER` | `neatlogs.reranker.model_name`, `neatlogs.reranker.query`, `neatlogs.reranker.top_k`, `neatlogs.reranker.input_documents.{i}`, `neatlogs.reranker.output_documents.{i}`, `neatlogs.reranker.input`, `neatlogs.reranker.output` |
+| `VECTOR_STORE` | `neatlogs.db.system`, `neatlogs.db.operation`, `neatlogs.db.collection_name`, `neatlogs.vectordb.index_name`, `neatlogs.vectordb.embedding_model`, `neatlogs.vectordb.vector_dimension`, `neatlogs.vectordb.similarity_algorithm`, `neatlogs.vector_store.input`, `neatlogs.vector_store.output` |
+| `EMBEDDING` | `neatlogs.embedding.model_name`, `neatlogs.embedding.text`, `neatlogs.embedding.token_count`, `neatlogs.embedding.vector`, `neatlogs.embedding.invocation_parameters`, `neatlogs.embedding.input`, `neatlogs.embedding.output` |
+| `GUARDRAIL` | `neatlogs.guardrail.input`, `neatlogs.guardrail.output`, `neatlogs.guardrail.passed`, `neatlogs.guardrail.score` |
+| `EVALUATOR` | `neatlogs.evaluator.input`, `neatlogs.evaluator.output`; encode evaluator name, criteria, and score in the JSON `neatlogs.metadata` attribute until dedicated evaluator fields exist |
+| `TOOL` | `neatlogs.tool.name`, `neatlogs.tool.description`, `neatlogs.tool.parameters`, `neatlogs.tool.input`, `neatlogs.tool.output` |
 
-#### TOOL
+Use indexed document keys. Do not emit the legacy `neatlogs.retrieval.*` namespace or invented keys such as `neatlogs.vector_store.query`.
 
-Tool/function call (web search, calculator, API call, etc.).
-
-```python
-@neatlogs.span(kind="TOOL", tool_name="web_search", description="Search the web")
-def web_search(query: str) -> str:
-    return search_api.search(query)
-```
-
-To attach a JSON schema or other tool-level metadata, set it inside a nested `trace()`:
+### Unsupported/raw LLM
 
 ```python
 import json
-
-@neatlogs.span(kind="TOOL", tool_name="web_search")
-def web_search(query: str) -> str:
-    with neatlogs.trace("web_search_schema") as span:
-        span.set_attribute("tool.json_schema", json.dumps({
-            "type": "object",
-            "properties": {"query": {"type": "string"}},
-            "required": ["query"],
-        }))
-    return search_api.search(query)
-```
-
-#### RETRIEVER
-
-RAG retrieval. For supported retrieval libraries (LangChain retrievers, chromadb, pinecone, etc.) auto-instrumentation handles everything — no decorator needed. For a **custom** retriever, use `@span(kind="RETRIEVER")` plus a nested `trace()` block to set `neatlogs.retriever.*` attributes:
-
-```python
-import json
-
-@neatlogs.span(kind="RETRIEVER")
-def retrieve_docs(query: str, top_k: int = 5) -> list:
-    with neatlogs.trace("retrieval_details") as span:
-        span.set_attribute("neatlogs.retriever.query", query)
-        span.set_attribute("neatlogs.retriever.top_k", top_k)
-        docs = vector_db.search(query, top_k=top_k)
-        span.set_attribute("neatlogs.retriever.documents", json.dumps(docs))
-    return docs
-```
-
-See §3 for the full attribute list.
-
-#### EMBEDDING
-
-Embedding generation. For supported providers (OpenAI, Cohere, etc.) auto-instrumentation captures model and dimensions automatically. For a **custom** embedding implementation, use a nested `trace()` block to set `neatlogs.embedding.*` attributes — the decorator alone does not auto-extract embedding metadata.
-
-```python
-import json
-
-@neatlogs.span(kind="EMBEDDING")
-def embed_texts(texts: list[str]) -> list[list[float]]:
-    with neatlogs.trace("embedding_details") as span:
-        span.set_attribute("neatlogs.embedding.model_name", "text-embedding-3-small")
-        span.set_attribute("neatlogs.embedding.text", json.dumps(texts))
-        vectors = embedding_model.encode(texts)
-        span.set_attribute("neatlogs.embedding.vector", json.dumps(vectors))
-        span.set_attribute("neatlogs.embedding.token_count", sum(len(t.split()) for t in texts))
-    return vectors
-```
-
-#### GUARDRAIL
-
-Input/output validation and safety checks. For supported guardrail libraries (`instrumentations=["guardrails"]`) attributes are captured automatically. For a **custom** guardrail, use a nested `trace()` to set `neatlogs.guardrail.*` attributes:
-
-```python
-@neatlogs.span(kind="GUARDRAIL")
-def check_toxicity(text: str) -> dict:
-    with neatlogs.trace("toxicity_check") as span:
-        span.set_attribute("neatlogs.guardrail.input", text)
-        result = toxicity_model.check(text)
-        span.set_attribute("neatlogs.guardrail.passed", result.score < 0.5)
-        span.set_attribute("neatlogs.guardrail.output", f"score={result.score:.2f}")
-    return {"passed": result.score < 0.5, "score": result.score}
-```
-
-#### MCP_TOOL
-
-MCP protocol tool handlers. Auto-handles Pydantic model args via `.model_dump()` and wraps string results as `{"result": "..."}` for `output.value`.
-
-```python
-@neatlogs.span(kind="MCP_TOOL", tool_name="get_weather", description="Get current weather")
-async def get_weather(location: str) -> str:
-    return f"Weather in {location}: Sunny, 72°F"
-```
-
-### Complete Multi-Agent Example
-
-```python
 import neatlogs
-from neatlogs import SystemPromptTemplate, UserPromptTemplate
+from opentelemetry.trace import Status, StatusCode
 
-neatlogs.init(
-    api_key="...",  # Get from https://app.neatlogs.com/settings/api-keys (or set NEATLOGS_API_KEY env var)
-    workflow_name="research-app",
-    instrumentations=["openai"],
-)
-
-from openai import OpenAI  # Import AFTER init() for auto-instrumentation
-
-client = OpenAI()
-
-sys_tpl = SystemPromptTemplate([
-    {"role": "system", "content": "You are a senior {{role}}. Be thorough."}
-])
-user_tpl = UserPromptTemplate([
-    {"role": "user", "content": "Analyze: {{search_results}}"}
-])
-
-@neatlogs.span(kind="TOOL", tool_name="web_search")
-def web_search(query: str) -> str:
-    return f"Results for: {query}"
-
-@neatlogs.span(kind="AGENT", name="researcher", role="Research Analyst")
-def researcher(topic: str) -> str:
-    search_results = web_search(topic)
+with neatlogs.trace("raw_provider_request", kind="WORKFLOW"):
     with neatlogs.trace(
-        "llm_call",
+        "unsupported_provider.chat",
         kind="LLM",
-        system_prompt_template=sys_tpl,
-        user_prompt_template=user_tpl,
-    ):
-        messages = sys_tpl.compile(role="research analyst") + user_tpl.compile(search_results=search_results)
-        response = client.chat.completions.create(model="gpt-4o", messages=messages)
-    return response.choices[0].message.content
+        **{"neatlogs.internal": False},
+    ) as span:
+        span.set_attribute("neatlogs.llm.provider", "unsupported_provider")
+        span.set_attribute("neatlogs.llm.model_name", model)
+        span.set_attribute("neatlogs.llm.input_messages.0.role", "user")
+        span.set_attribute("neatlogs.llm.input_messages.0.content", prompt)
 
-@neatlogs.span(kind="WORKFLOW")
-def run_pipeline(topic: str) -> str:
-    return researcher(topic)
-
-result = run_pipeline("quantum computing")
-neatlogs.flush()
-neatlogs.shutdown()
+        try:
+            response = call_unsupported_provider(prompt, stream=False)
+            span.set_attribute("neatlogs.llm.output_messages.0.role", "assistant")
+            span.set_attribute("neatlogs.llm.output_messages.0.content", response.text)
+            span.set_attribute("neatlogs.llm.token_count.prompt", response.usage.input_tokens)
+            span.set_attribute("neatlogs.llm.token_count.completion", response.usage.output_tokens)
+            span.set_attribute("neatlogs.llm.token_count.total", response.usage.total_tokens)
+            span.set_attribute("neatlogs.llm.finish_reason", response.finish_reason)
+        except Exception as exc:
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            raise
 ```
 
-### Using `@span()` on Class Methods
+For streaming, set `neatlogs.llm.is_streaming = True`, keep the LLM context open while consuming the stream, accumulate the final output and usage, then set them before leaving the context. Do not close the span when only the stream handle has been returned.
 
-`@span()` works on both regular functions and class methods. Place the decorator directly on the method:
+### Retriever, reranker, and vector-store write
 
 ```python
-class ResearchAgent:
-    def __init__(self, client):
-        self.client = client
+with neatlogs.trace("search", kind="RETRIEVER") as span:
+    span.set_attribute("neatlogs.retriever.query", query)
+    span.set_attribute("neatlogs.retriever.top_k", top_k)
+    span.set_attribute("neatlogs.retriever.input", json.dumps({"query": query, "top_k": top_k}))
+    docs = custom_store.search(query, top_k=top_k)
+    for i, doc in enumerate(docs):
+        span.set_attribute(f"neatlogs.retriever.documents.{i}", json.dumps(doc, default=str))
+    span.set_attribute("neatlogs.retriever.output", json.dumps(docs, default=str))
 
-    @neatlogs.span(kind="AGENT", name="researcher", role="Research Analyst")
-    def run(self, topic: str) -> str:
-        with neatlogs.trace(
-            "llm_call",
-            kind="LLM",
-            system_prompt_template=sys_tpl,
-            user_prompt_template=user_tpl,
-        ):
-            messages = sys_tpl.compile() + user_tpl.compile(topic=topic)
-            response = self.client.chat.completions.create(model="gpt-4o", messages=messages)
-        return response.choices[0].message.content
+with neatlogs.trace("rerank", kind="RERANKER") as span:
+    span.set_attribute("neatlogs.reranker.model_name", reranker_model)
+    span.set_attribute("neatlogs.reranker.query", query)
+    span.set_attribute("neatlogs.reranker.top_k", top_n)
+    span.set_attribute("neatlogs.reranker.input", json.dumps({"query": query, "documents": docs}, default=str))
+    for i, doc in enumerate(docs):
+        span.set_attribute(f"neatlogs.reranker.input_documents.{i}", json.dumps(doc, default=str))
+    ranked = custom_reranker(query, docs, top_n)
+    for i, doc in enumerate(ranked):
+        span.set_attribute(f"neatlogs.reranker.output_documents.{i}", json.dumps(doc, default=str))
+    span.set_attribute("neatlogs.reranker.output", json.dumps(ranked, default=str))
 
-    @neatlogs.span(kind="TOOL", tool_name="summarize")
-    def summarize(self, text: str) -> str:
-        return text[:200]
+with neatlogs.trace("upsert_documents", kind="VECTOR_STORE") as span:
+    span.set_attribute("neatlogs.db.system", "custom_vector_db")
+    span.set_attribute("neatlogs.db.operation", "upsert")
+    span.set_attribute("neatlogs.vectordb.index_name", index_name)
+    span.set_attribute("neatlogs.vector_store.input", json.dumps(docs, default=str))
+    result = custom_store.upsert(docs)
+    span.set_attribute("neatlogs.vector_store.output", json.dumps(result, default=str))
 ```
 
----
+A vector search is normally `RETRIEVER`; use `VECTOR_STORE` for writes and index-management operations.
 
-## 2. `neatlogs.trace()` Context Manager
-
-Use `trace()` for:
-
-1. **Prompt template tracking** — pass `system_prompt_template=` / `user_prompt_template=` to capture template + variables on LLM spans (primary use case)
-2. **Setting custom attributes** on a span for any kind (call `span.set_attribute(...)` inside the block)
-3. **Span kinds that `@span()` doesn't accept**: `RERANKER`, `VECTOR_STORE`, `LLM`
-
-### Signature
+### Embedding, guardrail, and evaluator
 
 ```python
-with neatlogs.trace(
-    name,                             # Required: span name
-    kind=None,                        # Optional: span kind (any string accepted)
-    system_prompt_template=None,      # Optional: SystemPromptTemplate instance
-    user_prompt_template=None,        # Optional: UserPromptTemplate instance
-    mask=None,                        # Optional: per-span mask function
-) as span:
-    ...
+with neatlogs.trace("embed", kind="EMBEDDING") as span:
+    span.set_attribute("neatlogs.embedding.model_name", embedding_model)
+    span.set_attribute("neatlogs.embedding.text", text)
+    span.set_attribute("neatlogs.embedding.input", json.dumps({"text": text}))
+    vector = custom_embedder(text)
+    span.set_attribute("neatlogs.embedding.output", json.dumps({"dimensions": len(vector)}))
+
+with neatlogs.trace("safety_check", kind="GUARDRAIL") as span:
+    span.set_attribute("neatlogs.guardrail.input", text)
+    result = custom_guardrail(text)
+    span.set_attribute("neatlogs.guardrail.passed", result.passed)
+    span.set_attribute("neatlogs.guardrail.score", result.score)
+    span.set_attribute("neatlogs.guardrail.output", json.dumps(result, default=str))
+
+with neatlogs.trace("answer_quality", kind="EVALUATOR") as span:
+    span.set_attribute("neatlogs.evaluator.input", json.dumps({"answer": answer, "reference": reference}))
+    score = custom_evaluator(answer, reference)
+    span.set_attribute("neatlogs.evaluator.output", json.dumps({"score": score}))
+    span.set_attribute("neatlogs.metadata", json.dumps({"evaluator": "answer_quality"}))
 ```
 
-> `prompt_template=` is a backward-compat alias for `system_prompt_template=`. Existing code using the old name keeps working; new code should prefer the canonical name. For legacy string templates (not `SystemPromptTemplate` instances), variables can be passed via `system_prompt_variables=` / `user_prompt_variables=` — rarely needed.
+## One capture owner and valid composition
 
-### When you need `as span:` (and when you don't)
+- Supported wrapper/handler/hook/processor + custom outer `WORKFLOW`/`CHAIN`/`AGENT`: valid when the parent represents real multi-step application orchestration.
+- Supported LLM capture + application-owned `TOOL`/`RETRIEVER`/`RERANKER`/`GUARDRAIL`/`EVALUATOR`: valid when that integration does not already capture the operation.
+- Manual semantic trace inside an `@span` for the same operation: duplicate; choose one.
+- Provider wrapper/instrumentor around a framework-routed model call already captured by the framework: duplicate; remove one capture owner.
 
-- **Prompt template tracking only** — `as span:` is not needed. Variables captured via `SystemPromptTemplate.compile(...)` inside the block land on the span automatically.
+## `neatlogs.log()` and lifecycle
 
-  ```python
-  # Templates constructed with a message list (see §1) so .compile() returns a
-  # list[dict] ready for the chat messages= param.
-  sys_tpl = SystemPromptTemplate([{"role": "system", "content": "You are a {{role}}."}])
-  user_tpl = UserPromptTemplate([{"role": "user", "content": "{{query}}"}])
+Use `neatlogs.log()` inside an active Neatlogs span and enable `capture_logs=True` when logs should export. `@span()` supports sync and async functions; `trace()` is a synchronous context manager that may contain awaited code. Scripts must flush/shutdown; servers initialize once and flush/shutdown during process shutdown.
 
-  with neatlogs.trace("llm_call", kind="LLM",
-                      system_prompt_template=sys_tpl,
-                      user_prompt_template=user_tpl):
-      msgs = sys_tpl.compile(role="researcher") + user_tpl.compile(query=query)
-      response = client.chat.completions.create(model="gpt-4o", messages=msgs)
-  ```
+## Verification
 
-- **Setting custom attributes** — bind with `as span:` so you can call `span.set_attribute(...)`.
-
-  ```python
-  with neatlogs.trace("rerank", kind="RERANKER") as span:
-      span.set_attribute("neatlogs.reranker.query", query)
-      span.set_attribute("neatlogs.reranker.top_k", top_n)
-      ...
-  ```
-
-### Common Anti-Pattern
-
-Do NOT wrap a function that already has `@span(kind="WORKFLOW")` in `trace()` — it creates a redundant extra span:
-
-```python
-# WRONG: Redundant wrapper
-@neatlogs.span(kind="WORKFLOW")
-def my_workflow():
-    pass
-
-with neatlogs.trace(name="main"):
-    my_workflow()  # Already traced by @span decorator
-
-# RIGHT: Just call it directly
-my_workflow()
-```
-
----
-
-## 3. Using `trace()` for Custom Attributes and Non-Decorator Kinds
-
-Use `trace()` with manual attributes whenever you need to enrich a span for a custom (non-standard-lib) implementation of any kind. The three kinds below can only be created via `trace()`.
-
-### RERANKER
-
-For reranking retrieved documents. (Not accepted by `@span()`.)
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `neatlogs.reranker.query` | `str` | The reranking query |
-| `neatlogs.reranker.top_k` | `int` | Number of top results requested |
-| `neatlogs.reranker.model_name` | `str` | Reranker model name |
-| `neatlogs.reranker.input_documents` | `JSON str` | Documents before reranking |
-| `neatlogs.reranker.output_documents` | `JSON str` | Documents after reranking |
-
-```python
-import json
-import neatlogs
-
-def rerank(query: str, docs: list, top_n: int = 3) -> list:
-    with neatlogs.trace("rerank", kind="RERANKER") as span:
-        span.set_attribute("neatlogs.reranker.query", query)
-        span.set_attribute("neatlogs.reranker.top_k", top_n)
-        span.set_attribute("neatlogs.reranker.model_name", "cohere-rerank-v3")
-        span.set_attribute("neatlogs.reranker.input_documents", json.dumps(docs))
-        reranked = reranker_model.rerank(query, docs, top_n=top_n)
-        span.set_attribute("neatlogs.reranker.output_documents", json.dumps(reranked))
-    return reranked
-```
-
-### VECTOR_STORE
-
-For direct vector database operations (insert, index, query) on a custom/unsupported store. For chromadb, pinecone, qdrant, weaviate, milvus, etc., add them to `instrumentations=[]` instead of using `trace()`.
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `neatlogs.vectordb.index_name` | `str` | Name of the vector index/collection |
-| `neatlogs.vectordb.embedding_model` | `str` | Embedding model used |
-| `neatlogs.vectordb.vector_dimension` | `int` | Dimension of stored vectors |
-| `neatlogs.vectordb.similarity_algorithm` | `str` | Distance metric (e.g. `cosine`, `dot_product`) |
-
-```python
-import neatlogs
-
-def index_documents(docs: list):
-    with neatlogs.trace("index_documents", kind="VECTOR_STORE") as span:
-        span.set_attribute("neatlogs.vectordb.index_name", "support_kb")
-        span.set_attribute("neatlogs.vectordb.embedding_model", "text-embedding-3-small")
-        span.set_attribute("neatlogs.vectordb.vector_dimension", 1536)
-        span.set_attribute("neatlogs.vectordb.similarity_algorithm", "cosine")
-        my_custom_store.upsert(docs)
-```
-
-### LLM
-
-For provider auto-instrumentation, use `instrumentations=["openai"]` (etc.) — `trace(kind="LLM")` is only needed to attach prompt templates to an already-instrumented call. See §4.
-
-### RETRIEVER Attributes (custom implementations)
-
-| Attribute | Type | Description |
-|---|---|---|
-| `neatlogs.retriever.query` | `str` | The retrieval query |
-| `neatlogs.retriever.top_k` | `int` | Number of results requested |
-| `neatlogs.retriever.documents` | `JSON str` | Retrieved documents |
-
-Always emit `neatlogs.retriever.*`. `neatlogs.retrieval.*` is a legacy ingest
-alias and must not be used by new SDK code or examples.
-
-### GUARDRAIL Attributes (custom implementations)
-
-| Attribute | Type | Description |
-|---|---|---|
-| `neatlogs.guardrail.input` | `str` | Input to the guardrail |
-| `neatlogs.guardrail.passed` | `bool` | Whether the guardrail check passed |
-| `neatlogs.guardrail.output` | `str` | Output / result of the guardrail |
-
-### EMBEDDING Attributes (custom implementations)
-
-| Attribute | Type | Description |
-|---|---|---|
-| `neatlogs.embedding.model_name` | `str` | Embedding model name |
-| `neatlogs.embedding.text` | `str` | Input text |
-| `neatlogs.embedding.vector` | `list[float]` | Embedding vector |
-| `neatlogs.embedding.token_count` | `int` | Token count |
-
----
-
-## 4. Prompt-Template Wrapper for LLM Calls
-
-`trace(kind="LLM")` attaches prompt templates to an already-instrumented LLM call. The OpenInference instrumentor creates the LLM span itself; `trace()` just stamps the templates:
-
-```python
-sys_tpl = SystemPromptTemplate("You are a helpful assistant.")
-user_tpl = UserPromptTemplate("{{query}}")
-
-with neatlogs.trace(
-    "llm_call",
-    kind="LLM",
-    system_prompt_template=sys_tpl,
-    user_prompt_template=user_tpl,
-):
-    system_prompt = sys_tpl.compile()
-    user_prompt = user_tpl.compile(query=user_query)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_prompt},
-                  {"role": "user", "content": user_prompt}],
-    )
-```
-
-Do not set `neatlogs.llm.*` attributes manually on auto-instrumented LLM spans — the SDK's attribute processor already populates them from vendor attributes.
-
----
-
-## 5. `neatlogs.log()` Structured Logging
-
-```python
-neatlogs.log("retrieved {count} docs in {ms}ms", count=len(docs), ms=elapsed)
-```
-
-- **Signature**: `log(msg_template, level="info", **data)`
-- Template with `{key}` placeholders — stored as span name (`log.template` attribute)
-- The rendered message is stored as the log body
-- Each keyword arg stored as `log.{key}` attribute
-- **Requires** being inside an active `@span` or `trace()` context — the log record inherits `trace_id` and `span_id` from the active span
-- Requires `capture_logs=True` in `neatlogs.init()`
-
----
-
-## 6. Span Nesting Pattern
-
-Decorators and context managers create parent-child relationships. Each nested `@span` or `trace()` becomes a child of the enclosing span:
-
-```
-@span(kind="WORKFLOW")     -> top-level span
-  @span(kind="AGENT")      -> child of workflow
-    trace("llm_call")       -> child of agent (captures prompt template)
-      LLM API call           -> auto-instrumented child span
-    @span(kind="TOOL")      -> child of agent
-```
-
-The nesting is automatic — OpenTelemetry's context propagation ensures any span created within an active span becomes its child.
-
----
-
-## 7. Async Support
-
-- `@span()` works with both sync and async functions automatically. It detects `async def` and wraps them correctly.
-- `trace()` is a sync `@contextmanager` but works in async code — the context manager itself is sync, the code inside can be async.
-
-```python
-# sys_tpl and user_tpl use the message-list form (see §1) so .compile()
-# returns a list[dict] that can be passed straight to chat messages=.
-sys_tpl = SystemPromptTemplate([{"role": "system", "content": "You are a researcher."}])
-user_tpl = UserPromptTemplate([{"role": "user", "content": "Research: {{topic}}"}])
-
-
-@neatlogs.span(kind="AGENT", name="async_researcher")
-async def async_researcher(topic: str) -> str:
-    with neatlogs.trace("llm_call", kind="LLM",
-                        system_prompt_template=sys_tpl,
-                        user_prompt_template=user_tpl):
-        msgs = sys_tpl.compile() + user_tpl.compile(topic=topic)
-        response = await async_client.chat.completions.create(
-            model="gpt-4o", messages=msgs
-        )
-    return response.choices[0].message.content
-```
+- [ ] Every manual span is under an eligible root unless a supported capture owner self-roots.
+- [ ] Every real operation has exactly one semantic capture owner.
+- [ ] Unsupported operations populate the canonical kind-specific attributes above.
+- [ ] Streaming spans remain open until final output/usage or cancellation/error.
+- [ ] A live trace contains the intended hierarchy and no duplicate LLM/tool/retrieval spans.

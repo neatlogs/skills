@@ -22,6 +22,11 @@ Attach on the outer `.invoke()` / `.ainvoke()` / `.stream()` of the chain you ru
 ```python
 chain = prompt | model | parser
 result = chain.invoke({"question": q}, config={"callbacks": [handler]})
+
+# Async LCEL / bare model calls use the same handler.
+result = await chain.ainvoke({"question": q}, config={"callbacks": [handler]})
+async for chunk in chain.astream({"question": q}, config={"callbacks": [handler]}):
+    consume(chunk)
 ```
 
 ## LangGraph — attach at the GRAPH invocation, NOT the per-node model call
@@ -40,6 +45,17 @@ def analyst_node(state):
 
 # ✅ graph level — nodes + nested LLM/tool spans all appear
 app.invoke(state, config={"callbacks": [handler]})
+
+# Async graph nodes use ainvoke without a per-node handler.
+async def async_analyst_node(state):
+    response = await llm.ainvoke(state["messages"])
+    return {"messages": [response]}
+
+# Async graph entry points — still attach once at graph level. astream returns
+# an async iterator; iterate it directly rather than awaiting the iterator.
+result = await app.ainvoke(state, config={"callbacks": [handler]})
+async for event in app.astream(state, config={"callbacks": [handler]}):
+    consume(event)
 
 # ❌ DO NOT do this — per-node attach yields no node spans; the LLM orphans to the root
 # llm.invoke(state["messages"], config={"callbacks": [handler]})
@@ -71,5 +87,5 @@ app.invoke(state, config={"callbacks": [handler]})
 
 1. Exactly one `neatlogs.langchain_handler()` is created and reused.
 2. Plain LangChain: every model/chain call you want traced has `config={"callbacks": [handler]}`.
-3. LangGraph: the handler is attached at the graph invocation (`app.invoke(..., config={"callbacks": [handler]})`), NOT on the per-node `llm.invoke()`.
+3. LangGraph: the handler is attached at the graph invocation (`invoke` / `ainvoke` / `stream` / `astream`), NOT on a per-node model call. Async nodes await `ainvoke`; `astream` is consumed with `async for`.
 4. `import neatlogs` is present in the file that creates the handler.

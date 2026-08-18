@@ -17,7 +17,15 @@ Most real services do more than one thing: a chat copilot, a summarizer, a repor
 
 This skill is **language-agnostic**. Apply it alongside the language skill (`neatlogs-py`, `neatlogs-ts`, `neatlogs-go`) — those cover `init()` and span APIs; this covers how to split one codebase into N workflows.
 
+For managed Neatlogs, do not add an endpoint/base URL option or `NEATLOGS_ENDPOINT`; every SDK defaults to `https://ingest.neatlogs.com`.
+
 Canonical docs: https://docs.neatlogs.com/sdk/multiple-workflows
+
+## Completion gate
+
+Do not report success after editing files alone. Build the affected package or application, restart the real process, and exercise every changed workflow entry point. This skill does not grant platform access. Immediately before each real-path run, record the current UTC timestamp. After each run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(created_after=<UTC timestamp>)` directly to select the latest trace in the intended project; make no preliminary MCP discovery calls. While `status` is `processing` or `finalization_status` is `pending`, poll that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat.
+
+Inspect each full persisted span tree and its root workflow attribute, not only a trace-list summary or local debug output. Confirm every fresh trace is assigned to the intended workflow. If any workflow cannot be built, restarted, run, or verified, state that the instrumentation is incomplete and identify the exact blocker.
 
 ---
 
@@ -43,9 +51,9 @@ A large service uses both:
 | Dimension | What it is | Set by |
 |---|---|---|
 | **Root span name** | The **title** of an individual trace | The `name` passed when opening the root |
-| **Workflow** | The **group** a trace belongs to (dashboard Workflow column / filter / analytics) | The `neatlogs.workflow_name` label — process default from `init()`, or a per-root override |
+| **Workflow** | The **group** a trace belongs to (dashboard Workflow column / filter / analytics) | Process default from `init(workflow_name=...)` / `init({ workflowName })`; canonical per-root override `neatlogs.workflow.name` |
 
-> ⚠️ **Naming the root span is NOT enough to make a distinct workflow.** The span name is the trace title; the Workflow dimension is driven by the `neatlogs.workflow_name` label. If a feature only opens a differently-*named* root but never overrides the label, it still rolls up under the single `init()` workflow. **Set the per-root override.** Convention: use the same human-readable string for both the root name and the workflow override so the trace title and Workflow column agree.
+> ⚠️ **Naming the root span is NOT enough to make a distinct workflow.** The span name is the trace title; the Workflow dimension uses the process default unless the root sets canonical `neatlogs.workflow.name`. If a feature only opens a differently-*named* root but never sets that attribute, it still rolls up under the single `init()` workflow. Convention: use the same human-readable string for both the root name and the workflow override so the trace title and Workflow column agree.
 
 ---
 
@@ -55,7 +63,7 @@ Open the root at the FIRST line of the feature's work, and set the label there.
 
 ### Python
 
-`neatlogs.workflow_name` isn't a valid Python keyword, so set it with `set_attribute` on the root span:
+Set the canonical per-root `neatlogs.workflow.name` attribute with `set_attribute`:
 
 ```python
 import neatlogs
@@ -65,7 +73,7 @@ neatlogs.init(api_key=..., workflow_name="my-service")  # process-wide default
 @app.post("/copilot/chat")
 async def copilot_chat(req):
     with neatlogs.trace("Copilot chat", kind="WORKFLOW") as root:
-        root.set_attribute("neatlogs.workflow_name", "Copilot chat")   # <- makes it its own workflow
+        root.set_attribute("neatlogs.workflow.name", "Copilot chat")
         return await run_copilot(req)
 ```
 
@@ -77,7 +85,7 @@ from contextlib import contextmanager
 @contextmanager
 def workflow(name: str):
     with neatlogs.trace(name, kind="WORKFLOW") as root:
-        root.set_attribute("neatlogs.workflow_name", name)
+        root.set_attribute("neatlogs.workflow.name", name)
         yield root
 
 with workflow("Report generation"):
@@ -133,6 +141,6 @@ Keep it **one workflow per feature area**, not per request and not per file. Use
 The NeatLogs AI service (one FastAPI process) is the canonical example:
 
 - **One `init(workflow_name="AI Service")`** as the coarse process fallback.
-- **Each feature opens its own `WORKFLOW` root at its handler and overrides the label** — Copilot chat, the trace summarizer, the form builder, suggestion generation — via a shared helper that calls `span.set_attribute("neatlogs.workflow_name", <label>)` on the root plus tenant/session attributes. The backend prefers this per-root value over the process default for the trace's Workflow column.
+- **Each feature opens its own `WORKFLOW` root at its handler and overrides the label** — adapt the names to the application's real features — via a shared helper that calls `span.set_attribute("neatlogs.workflow.name", <label>)` on the root plus tenant/session attributes. The backend prefers this per-root value over the process default for the trace's Workflow column.
 - **A separately-booted sub-app runs its own `init(workflow_name="Neatlogs Harness")`** — level 1 (separate boot path → separate workflow).
 - Features that only name the root but skip the override still roll up under `"AI Service"` — proof that the override, not the span name, carves out a distinct workflow.
