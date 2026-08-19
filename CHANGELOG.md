@@ -16,6 +16,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Corrected TypeScript retriever documentation to use canonical `neatlogs.retriever.documents.N.{content,id,score,metadata}` attributes for every returned document without client-side truncation.
+- Corrected direct-ingest guidance so standard `gen_ai.retrieval.documents` maps to the canonical aggregate `neatlogs.retriever.documents` attribute.
 
 ## [1.2.3] - 2026-08-19
 
