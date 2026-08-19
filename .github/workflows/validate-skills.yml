@@ -1,0 +1,41 @@
+name: Validate Skills
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: skills-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate manifests, links, and plugin metadata
+        run: python scripts/validate-skills.py
+
+      - name: Package every public skill
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/neatlogs-skills"
+          mkdir -p "$artifact_dir"
+          for manifest in skills/*/SKILL.md; do
+            skill_dir=$(dirname "$manifest")
+            skill_id=$(basename "$skill_dir")
+            (cd skills && zip -qr "$artifact_dir/$skill_id.zip" "$skill_id")
+            unzip -tq "$artifact_dir/$skill_id.zip"
+          done
