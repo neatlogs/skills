@@ -44,5 +44,6 @@ Rule of thumb: if removing the decorated function would lose a meaningful proces
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point (trace root).
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps. NOT a single agent call.
 - `@neatlogs.span(kind="TOOL"|"RETRIEVER"|...)` — your own discrete tool / retrieval functions not managed by the framework.
-- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom semantic operation that needs direct attributes or an extended kind (`RERANKER`, `VECTOR_STORE`, `EVALUATOR`, raw `LLM`). Do not nest it inside an `@span` for the same operation.
+- `@neatlogs.span(kind="EVALUATOR"|"MEMORY")` — an ordinary application-owned evaluator or memory function; evaluator function input/output and errors are captured automatically.
+- `neatlogs.trace("name", kind=...)` — the sole span for the only kinds `@span` rejects (`LLM`, `RERANKER`, and `VECTOR_STORE`), or for a raw/custom operation with no decorator boundary or direct canonical metadata needs (for example, a DeepEval callback). Do not nest it inside an `@span` for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — record a step/event inside the current span.

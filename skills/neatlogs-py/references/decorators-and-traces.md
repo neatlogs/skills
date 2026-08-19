@@ -6,7 +6,7 @@ Never add a manual span of the same semantic kind around a call already captured
 
 ## Root requirement
 
-A completed trace must contain a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. Direct provider wrappers and supported framework integrations create an eligible root when needed. A standalone manual `LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, or `EVALUATOR` span does not; put it under a real orchestration root.
+A completed trace must contain a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. Direct provider wrappers and supported framework integrations create an eligible root when needed. A standalone manual `LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, `EVALUATOR`, or `MEMORY` span does not; put it under a real orchestration root.
 
 ```python
 @neatlogs.span(kind="WORKFLOW", name="answer_question")
@@ -19,7 +19,7 @@ Do not add an otherwise meaningless root around a single supported wrapped call 
 
 ## `@neatlogs.span()` for custom functions
 
-`@span()` accepts `WORKFLOW`, `AGENT`, `CHAIN`, `TOOL`, `RETRIEVER`, `EMBEDDING`, `GUARDRAIL`, and `MCP_TOOL`. It captures function input/output and errors. `RETRIEVER` also extracts a `query`/`question`/`text` argument and returned documents.
+`@span()` accepts `WORKFLOW`, `AGENT`, `CHAIN`, `TOOL`, `RETRIEVER`, `EMBEDDING`, `GUARDRAIL`, `EVALUATOR`, `MEMORY`, and `MCP_TOOL`. It captures function input/output and errors. `RETRIEVER` also extracts a `query`/`question`/`text` argument and returned documents.
 
 ```python
 @neatlogs.span(kind="TOOL", tool_name="lookup_account")
@@ -29,15 +29,23 @@ def lookup_account(account_id: str):
 @neatlogs.span(kind="RETRIEVER", name="search_knowledge_base")
 def search_knowledge_base(query: str, top_k: int = 5):
     return custom_store.search(query, top_k=top_k)
+
+@neatlogs.span(kind="EVALUATOR", name="answer_quality")
+def evaluate_answer(answer: str, reference: str):
+    return {"score": custom_evaluator(answer, reference)}
+
+@neatlogs.span(kind="MEMORY", name="save_memory")
+def save_memory(user_id: str, fact: str):
+    return memory_store.save(user_id, fact)
 ```
 
 Use these only when the operation is not framework-owned. For example, `neatlogs.wrap(OpenAI())` captures OpenAI model and embedding calls and records tool-call requests on the LLM span, but it cannot execute the application function selected by that request. A custom dispatcher function still needs one `TOOL` span. An OpenAI Agents processor, by contrast, owns the framework's actual tool execution span too, so do not decorate that tool again.
 
 Do not decorate a one-line pass-through to an automatically captured call. Use `WORKFLOW`, `AGENT`, or `CHAIN` only when the function genuinely performs that orchestration.
 
-## `neatlogs.trace()` for extended/custom kinds
+## `neatlogs.trace()` for rejected kinds or direct metadata
 
-Use `trace()` when the operation needs an extended kind that `@span()` rejects (`LLM`, `RERANKER`, `VECTOR_STORE`, `EVALUATOR`) or when canonical attributes must be set directly. It is the operation's sole span, not an extra layer inside an `@span` for the same operation.
+Only `LLM`, `RERANKER`, and `VECTOR_STORE` are rejected by `@span()`. Use `trace()` for those kinds, or when a raw/custom operation has no decorator boundary or must set canonical attributes directly. For example, a DeepEval lifecycle callback may use `trace(kind="EVALUATOR")`; an ordinary application-owned evaluator function should use `@span(kind="EVALUATOR")` for automatic input/output and error capture. The chosen primitive is the operation's sole span, not an extra layer inside an `@span` for the same operation.
 
 The tables below list the canonical attributes to set when known. Always record the operation input/output. For a manual `trace()`, catch failures long enough to call `span.record_exception(exc)` and `span.set_status(Status(StatusCode.ERROR, str(exc)))`, then re-raise. Keep the context open through complete stream consumption.
 
@@ -123,7 +131,7 @@ with neatlogs.trace("upsert_documents", kind="VECTOR_STORE") as span:
 
 A vector search is normally `RETRIEVER`; use `VECTOR_STORE` for writes and index-management operations.
 
-### Embedding, guardrail, and evaluator
+### Embedding and guardrail with direct metadata
 
 ```python
 with neatlogs.trace("embed", kind="EMBEDDING") as span:
@@ -139,13 +147,9 @@ with neatlogs.trace("safety_check", kind="GUARDRAIL") as span:
     span.set_attribute("neatlogs.guardrail.passed", result.passed)
     span.set_attribute("neatlogs.guardrail.score", result.score)
     span.set_attribute("neatlogs.guardrail.output", json.dumps(result, default=str))
-
-with neatlogs.trace("answer_quality", kind="EVALUATOR") as span:
-    span.set_attribute("neatlogs.evaluator.input", json.dumps({"answer": answer, "reference": reference}))
-    score = custom_evaluator(answer, reference)
-    span.set_attribute("neatlogs.evaluator.output", json.dumps({"score": score}))
-    span.set_attribute("neatlogs.metadata", json.dumps({"evaluator": "answer_quality"}))
 ```
+
+For a DeepEval callback or adapter with no application-owned function boundary to decorate, `trace(kind="EVALUATOR")` may instead be the sole owner so it can set `neatlogs.evaluator.input`, `neatlogs.evaluator.output`, and JSON `neatlogs.metadata` directly. Do not wrap an `@span(kind="EVALUATOR")` evaluator with that trace.
 
 ## One capture owner and valid composition
 

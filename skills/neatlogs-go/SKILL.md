@@ -139,14 +139,13 @@ never emit the legacy `neatlogs.retrieval.*` spelling from new code.
 
 Show concise, secret-free progress for install, edits, checks/build, process
 restart, runtime exercise, and platform confirmation. This skill does not grant
-platform access. Immediately before exercising the real path, record the current
-UTC timestamp. After the run, call the already-connected Neatlogs platform MCP's
-existing `get_trace_context(created_after=<UTC timestamp>)` directly to select
-the latest trace in the intended project; make no preliminary MCP discovery
-calls. While `status` is `processing` or `finalization_status` is `pending`, poll
-that same trace with `get_trace_context(trace_id=<trace_id>)`. Once finalized,
-page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until
-`next_offset` is null, and verify that all `span_count` spans were inspected.
+platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend; a merged backend change or updated local wizard alone is not proof.
+
+For the representative run, generate a UUID and append `neatlogs.verification.marker=<UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries. Scope it only to the launched process: do not edit source or persistent configuration, and do not treat the marker as a secret. Immediately before exercising the real path, record the current UTC timestamp. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with that temporary environment value, then continue verification against the same marker.
+
+After the run, call the already-connected Neatlogs platform MCP's existing `get_trace_context(verification_marker=<same UUID>)` directly; make no preliminary MCP discovery calls and never fall back to the latest trace if the marker is absent; report that exact blocker and leave verification incomplete. While `status` is `processing` or `finalization_status` is `pending`, poll the same trace with `get_trace_context(trace_id=<trace_id>)`. Only after `finalization_status` is `finalized`, page with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null, and verify that all `span_count` spans were inspected.
+
+If `get_trace_context` rejects `verification_marker`, `trace_id`, or `offset`, or omits `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query.
 
 If platform MCP is unavailable, ask the user to connect it through their coding
 agent using the Neatlogs MCP server (`https://ingest.neatlogs.com/mcp`) or the
@@ -160,7 +159,7 @@ Do not report success until all of these are true:
 1. The project checks and build pass.
 2. The process that loads `Init` and the wrapper/helpers has been restarted.
 3. The real user path has been exercised, not just a synthetic import check.
-4. The latest project trace is the fresh run. Its full persisted span tree and
+4. The marker-matched project trace is the fresh run. Its full persisted span tree and
    attributes show exactly one canonical span per operation and no duplicate
    LLM span; a trace-list summary is not enough.
 

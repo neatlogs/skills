@@ -39,5 +39,6 @@ If the function only builds a message and drains the event stream, don't wrap it
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps, not a single runner call.
-- `neatlogs.trace("name", kind=...)` — the sole span for an unsupported/custom operation needing direct canonical attributes or an extended kind; never a second layer for the same operation.
+- `@neatlogs.span(kind="EVALUATOR"|"MEMORY")` — an ordinary application-owned evaluator or memory function; evaluator function input/output and errors are captured automatically.
+- `neatlogs.trace("name", kind=...)` — the sole span for the only kinds `@span` rejects (`LLM`, `RERANKER`, and `VECTOR_STORE`), or for a raw/custom operation with no decorator boundary or direct canonical metadata needs (for example, a DeepEval callback); never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

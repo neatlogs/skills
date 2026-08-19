@@ -33,7 +33,7 @@ Invalid examples:
 - A manual node/tool/retriever span already emitted by the LangChain handler.
 - A provider instrumentor around model calls routed through a framework wrapper that already emits LLM spans.
 
-For unsupported/raw operations and their canonical attributes, use [`decorators-and-traces.md`](decorators-and-traces.md). A manual non-root semantic kind (`LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, or `EVALUATOR`) must run below an eligible `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` root.
+For unsupported/raw operations and their canonical attributes, use [`decorators-and-traces.md`](decorators-and-traces.md). A manual non-root semantic kind (`LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, `EVALUATOR`, or `MEMORY`) must run below an eligible `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` root. Use `@span(kind="EVALUATOR")` or `@span(kind="MEMORY")` for ordinary custom functions. Use `trace()` only for the rejected `LLM`, `RERANKER`, and `VECTOR_STORE` kinds, or when a raw/custom operation has no decorator boundary or needs direct canonical metadata, such as a DeepEval callback.
 
 ## Root behavior
 

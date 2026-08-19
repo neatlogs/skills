@@ -17,6 +17,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Corrected TypeScript retriever documentation to use canonical `neatlogs.retriever.documents.N.{content,id,score,metadata}` attributes for every returned document without client-side truncation.
 - Corrected direct-ingest guidance so standard `gen_ai.retrieval.documents` maps to the canonical aggregate `neatlogs.retriever.documents` attribute.
+- Corrected Python evaluator guidance so ordinary custom evaluator and memory functions use supported `@span` kinds, while scoped evaluator traces are reserved for direct metadata or callbacks without a decorator boundary.
+- Made live verification select the exact process-scoped marker trace, require the deployed hosted MCP contract, poll finalization, and inspect every paginated span without falling back to the latest project trace.
 
 ## [1.2.3] - 2026-08-19
 
