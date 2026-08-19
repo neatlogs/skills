@@ -7,6 +7,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-08-19
+
+### Added
+
+- Documented `@neatlogs/codex` for tracing Codex coding sessions and distinguished it from the Agent Skills that teach coding agents to instrument user applications.
+
+### Fixed
+
+- Corrected TypeScript retriever documentation to use canonical `neatlogs.retriever.documents.N.{content,id,score,metadata}` attributes for every returned document without client-side truncation.
+
 ## [1.2.3] - 2026-08-19
 
 ### Added
@@ -35,5 +45,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...HEAD
+[1.2.4]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...skills-v1.2.4
 [1.2.3]: https://github.com/neatlogs/skills/compare/skills-v1.2.2...skills-v1.2.3

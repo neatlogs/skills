@@ -135,7 +135,7 @@ const retrieveDocs = span({ kind: 'RETRIEVER' }, async (query: string) => {
 The RETRIEVER postprocessor automatically:
 - Extracts the query from function args named `query`, `question`, or `text`
 - Extracts documents from array results or objects with `documents`/`docs`/`results` keys
-- Sets `retrieval.documents.N.document.*` attributes (up to 20 docs)
+- Sets canonical `neatlogs.retriever.documents.N.{content,id,score,metadata}` attributes for every returned document; do not truncate results client-side
 
 #### EMBEDDING
 

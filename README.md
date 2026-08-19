@@ -13,6 +13,17 @@ These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.)
 | [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — Gemini via `WrapGenAI`, direct/unsupported providers via explicit helpers, custom boundaries, and per-request identity |
 | [`neatlogs-ingest`](./skills/neatlogs-ingest/) | Any other language | Send nested JSON to HTTP ingest (`POST /v1/trace`) or configure OTLP/gRPC when OpenTelemetry already exists |
 
+## Trace Codex sessions with `@neatlogs/codex`
+
+These Agent Skills teach coding agents to instrument the application you are building. They do not trace the coding agent itself. To capture Codex coding sessions, install [`@neatlogs/codex`](https://github.com/neatlogs/neatlogs-codex), which registers Codex lifecycle hooks and exports those session traces to Neatlogs:
+
+```bash
+npm install -g @neatlogs/codex
+neatlogs-codex setup --global --api-key YOUR_PROJECT_KEY
+neatlogs-codex status --global
+neatlogs-codex doctor --global
+```
+
 ## Installation
 
 ### Recommended — works everywhere (Claude Code, Cursor, Codex, Windsurf, etc.)
