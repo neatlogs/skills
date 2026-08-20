@@ -8,11 +8,14 @@ plugin metadata, and archive boundaries must be correct before publication.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 from urllib.parse import unquote
+
+from jsonschema import Draft202012Validator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +24,16 @@ MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 VALID_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 AWS_ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")
+CONTRACT_DIR = ROOT / "contracts" / "v2"
+EXPECTED_DIALECT_ORDER = [
+    "native-v2",
+    "neatlogs-direct",
+    "otel-genai",
+    "openinference",
+    "provider-specific",
+    "external-legacy",
+    "unknown-raw",
+]
 
 
 def frontmatter(path: Path) -> dict[str, str]:
@@ -142,6 +155,132 @@ def validate_plugin_metadata(skill_names: set[str], errors: list[str]) -> None:
             )
 
 
+def validate_contract(errors: list[str]) -> None:
+    schema_path = CONTRACT_DIR / "neatlogs-telemetry.schema.json"
+    manifest_path = CONTRACT_DIR / "manifest.json"
+    try:
+        schema_bytes = schema_path.read_bytes()
+        schema = json.loads(schema_bytes)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"canonical telemetry contract is unreadable: {exc}")
+        return
+
+    actual_digest = hashlib.sha256(schema_bytes).hexdigest()
+    if manifest.get("schema_sha256") != actual_digest:
+        errors.append(
+            f"{manifest_path.relative_to(ROOT)}: schema_sha256 must equal {actual_digest}"
+        )
+    if manifest.get("schema_version") != 2:
+        errors.append(f"{manifest_path.relative_to(ROOT)}: schema_version must be 2")
+    if schema.get("$id") != manifest.get("schema_id"):
+        errors.append(f"{manifest_path.relative_to(ROOT)}: schema_id must equal schema $id")
+
+    try:
+        Draft202012Validator.check_schema(schema)
+    except Exception as exc:  # jsonschema includes the failing schema path.
+        errors.append(f"{schema_path.relative_to(ROOT)}: invalid JSON Schema: {exc}")
+        return
+
+    policy = schema.get("x-neatlogs-policy", {})
+    if policy.get("contract_version") != manifest.get("contract_version"):
+        errors.append("contract version differs between schema policy and manifest")
+    if policy.get("conflict_precedence") != EXPECTED_DIALECT_ORDER:
+        errors.append("canonical conflict precedence changed without a v2 contract update")
+
+    tool_policy = policy.get("tool_calls", {})
+    required_tool_policy = {
+        "assistant_requests_live_in_assistant_message": True,
+        "execution_is_separate_tool_span": True,
+        "retain_unlinked_execution": True,
+        "forbid_name_timing_merge": True,
+    }
+    for key, expected in required_tool_policy.items():
+        if tool_policy.get(key) is not expected:
+            errors.append(f"tool-call policy {key} must remain {expected!r}")
+
+    root_policy = policy.get("root_finalization", {})
+    if root_policy.get("launch_sdk_auto_workflow_roots") is not True:
+        errors.append("launch contract must retain automatic SDK workflow roots")
+    if root_policy.get("launch_completion_markers") is not True:
+        errors.append("launch contract must retain completion markers")
+    if root_policy.get("recovered_root_status_must_not_be_fabricated_ok") is not True:
+        errors.append("recovery contract must forbid fabricated OK status")
+
+    validator = Draft202012Validator(schema)
+    golden_paths = sorted((CONTRACT_DIR / "golden").glob("*.json"))
+    if not golden_paths:
+        errors.append("canonical telemetry contract has no golden fixtures")
+        return
+
+    fixtures: dict[str, dict] = {}
+    for fixture_path in golden_paths:
+        try:
+            fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"{fixture_path.relative_to(ROOT)}: unreadable: {exc}")
+            continue
+        fixtures[fixture_path.name] = fixture
+        validation_errors = sorted(
+            validator.iter_errors(fixture), key=lambda item: list(item.path)
+        )
+        for validation_error in validation_errors:
+            location = ".".join(str(item) for item in validation_error.absolute_path) or "$"
+            errors.append(
+                f"{fixture_path.relative_to(ROOT)}:{location}: {validation_error.message}"
+            )
+        if fixture.get("schema_version") != manifest.get("schema_version"):
+            errors.append(f"{fixture_path.relative_to(ROOT)}: wrong schema_version")
+        semantic = fixture.get("semantic")
+        if isinstance(semantic, dict) and semantic.get("kind") != fixture.get("kind"):
+            errors.append(
+                f"{fixture_path.relative_to(ROOT)}: semantic kind differs from envelope kind"
+            )
+
+    llm = fixtures.get("llm-tool-envelope.json", {})
+    choices = llm.get("semantic", {}).get("response", {}).get("choices", [])
+    if [choice.get("choice_index") for choice in choices] != [0, 1]:
+        errors.append("LLM golden fixture must preserve its two indexed choices")
+    tool_calls = choices[0].get("message", {}).get("tool_calls", []) if choices else []
+    if not tool_calls or tool_calls[0].get("id_origin") != "neatlogs-direct":
+        errors.append("LLM golden fixture must prove direct NeatLogs tool-call ID precedence")
+
+    execution = fixtures.get("tool-execution-envelope.json", {})
+    if (
+        execution.get("kind") != "TOOL"
+        or execution.get("semantic", {}).get("requesting_span_id") != llm.get("span_id")
+    ):
+        errors.append("tool execution golden fixture must be a separate linked TOOL span")
+    expected_call_id = tool_calls[0].get("id") if tool_calls else None
+    if execution.get("semantic", {}).get("call", {}).get("id") != expected_call_id:
+        errors.append("assistant tool request and execution must retain the same call ID")
+
+    unlinked = fixtures.get("unlinked-tool-envelope.json", {})
+    if (
+        unlinked.get("kind") != "TOOL"
+        or unlinked.get("semantic", {}).get("requesting_span_id") is not None
+    ):
+        errors.append("unlinked TOOL fixture must remain standalone and explicitly unlinked")
+
+    recovered = fixtures.get("recovered-root-envelope.json", {})
+    recovery = recovered.get("semantic", {}).get("recovery", {})
+    if recovered.get("status", {}).get("code") == "OK":
+        errors.append("recovered root golden fixture must not fabricate OK")
+    if recovery.get("synthetic") is not True or recovery.get("genuine_root_span_id") is not None:
+        errors.append("recovered root golden fixture must preserve explicit recovery identity")
+
+    reconciled = fixtures.get("reconciled-recovery-envelope.json", {})
+    reconciliation = reconciled.get("semantic", {}).get("recovery", {})
+    if (
+        reconciliation.get("reconciled") is not True
+        or not reconciliation.get("genuine_root_span_id")
+        or reconciled.get("status", {}).get("code") == "OK"
+    ):
+        errors.append(
+            "reconciled recovery fixture must reference the late genuine root without fabricating OK"
+        )
+
+
 def main() -> int:
     errors: list[str] = []
     names: list[str] = []
@@ -155,13 +294,14 @@ def main() -> int:
         errors.append(f"duplicate skill frontmatter name: {name}")
 
     validate_plugin_metadata(set(names), errors)
+    validate_contract(errors)
 
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print(f"Validated {len(names)} public skill packages")
+    print(f"Validated {len(names)} public skill packages and canonical telemetry contract v2")
     return 0
 
 
