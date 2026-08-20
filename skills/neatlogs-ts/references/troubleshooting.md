@@ -4,19 +4,16 @@ Common mistakes, anti-patterns, and diagnostic steps for the NeatLogs TypeScript
 
 ---
 
-## 1. `instrumentations: [...]` Throws (Most Common Mistake)
+## 1. `instrumentations: [...]` Was Removed (Most Common Mistake)
 
 | Wrong | Right |
 |-------|-------|
 | `await init({ instrumentations: ['openai'] })` | `await init({ ... })` then `wrapOpenAI(new OpenAI())` |
 
-`init()` **rejects** every provider/framework instrumentation key — the underlying OpenInference/OTel-contrib instrumentors drive the **global** OTel context, which Neatlogs' private provider cannot isolate. The thrown error names the replacement helper.
+The public option and runtime registry are removed because OpenInference/OTel-contrib instrumentors drive process-global OTel context, which Neatlogs' private provider cannot isolate. TypeScript rejects the property; the JavaScript compatibility guard throws a typed configuration error naming the replacement approach.
 
 ```typescript
-// ❌ WRONG — throws at init()
-//   The "openai" auto-instrumentation uses the global OpenTelemetry context and
-//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
-//   Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing.
+// ❌ WRONG — the option no longer exists; the runtime compatibility guard throws
 await init({ instrumentations: ['openai'] });
 
 // ✅ RIGHT — per-instance wrapper; import order is irrelevant
@@ -59,7 +56,7 @@ await shutdown();
 If traces are not appearing in the NeatLogs dashboard, check these in order:
 
 1. **Is `await init()` called?** → No → Add `await init(...)` at the top of your entry file.
-2. **Did `init()` throw?** → An `instrumentations: [...]` key in `init()` throws — remove it (see §1).
+2. **Did `init()` throw a configuration error?** → Remove any obsolete `instrumentations: [...]` property and use the explicit helper (see §1).
 3. **Is the client actually wrapped?** → No → Apply the matching helper from the [Supported Instrumentations table](../SKILL.md#supported-instrumentations), e.g. `const client = wrapOpenAI(new OpenAI())`. Wrapping the *return value* and then calling the **original** variable is the usual slip.
 4. **Is `NEATLOGS_API_KEY` set?** → No → Set it via env var or `apiKey` param. Without it, export is **silently disabled**.
 5. **Does a helper exist for this library?** → Check the [Supported Instrumentations table](../SKILL.md#supported-instrumentations). If not, the calls are raw HTTP as far as Neatlogs is concerned → add manual spans (see [`raw-http-llm.md`](raw-http-llm.md)).
@@ -107,9 +104,9 @@ process.on('SIGTERM', async () => {
 
 ---
 
-## 6. No-Op Instrumentation Keys
+## 6. Removed Instrumentation Keys
 
-`litellm`, `crewai`, `cohere`, `groq`, `llamaindex` and the vector-DB keys are in the registry but load no instrumentor, so `init()` accepts them **without throwing** — and instruments nothing. They're Python-side entries kept for scope detection; passing them buys you nothing and hides the fact that those calls are untraced.
+No provider/framework key is accepted. The old no-op keys and their registry entries were removed too, so they cannot silently imply coverage.
 
 Use the [Supported Instrumentations table](../SKILL.md#supported-instrumentations) as the source of truth. For a library with no helper, instrument the call sites manually — see [`raw-http-llm.md`](raw-http-llm.md).
 
@@ -194,13 +191,3 @@ const lookupUser = span(
 ```
 
 > **Note**: Per-span mask takes precedence — the global `init({ mask })` mask is skipped for that span.
-
----
-
-## 11. NEATLOGS_TRACE_CONTENT Environment Variable
-
-Set `NEATLOGS_TRACE_CONTENT=false` to globally disable input/output capture on all spans (overrides `captureInput`/`captureOutput` defaults). Useful for production environments with sensitive data.
-
-```bash
-export NEATLOGS_TRACE_CONTENT=false
-```

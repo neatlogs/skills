@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added the versioned wizard doctor gate to every Python, TypeScript, and Go instrumentation skill: read-only local preflight before edits, remediation only for explicitly fixable reason codes, and an authenticated probe after checks and real-path exercise.
+
+### Fixed
+
+- Removed the retired TypeScript `traceContent` and `NEATLOGS_TRACE_CONTENT` guidance.
+- Aligned TypeScript instrumentation guidance with the removed public registry: explicit wrappers, handlers, hooks, processors, and plugins are the only supported integration paths.
+
 ## [1.2.4] - 2026-08-19
 
 ### Added
