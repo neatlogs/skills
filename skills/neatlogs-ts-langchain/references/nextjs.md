@@ -49,4 +49,6 @@ const nextConfig = { serverExternalPackages: ["neatlogs"] };          // Next 15
 ## Verify
 - [ ] `instrumentation.ts` calls `init()` inside `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via DYNAMIC `await import("neatlogs")` (NOT top-level). ← the key requirement
 - [ ] NO `instrumentations` key in that `init()` — it throws for `"langchain"`. Route handlers attach `langchainHandler()` via `{ callbacks: [handler] }` instead.
-- [ ] Server boots without `Can't resolve 'crypto'`; invoking a chain produces spans. (If a route still errors, add `serverExternalPackages` per Step 2.)
+- [ ] Run the repository's package-manager build command after editing and fix instrumentation-related build/type errors.
+- [ ] Stop the old Next.js process and start a fresh process; hot reload does not prove a newly-added startup hook loaded. Rebuild/redeploy production.
+- [ ] Exercise the actual route/action that invokes the chain and confirm a new trace reaches the target project. (If it still errors, add `serverExternalPackages` per Step 2.)

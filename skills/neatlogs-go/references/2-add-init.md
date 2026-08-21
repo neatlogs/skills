@@ -46,7 +46,7 @@ func main() {
 | Field           | Type       | Notes                                                          |
 | --------------- | ---------- | -------------------------------------------------------------- |
 | `APIKey`        | `string`   | Required for export. Falls back to `NEATLOGS_API_KEY` env.     |
-| `Endpoint`      | `string`   | OTLP/HTTP ingest base URL.                                     |
+| `Endpoint`      | `string`   | Self-hosted OTLP/HTTP base URL. Omit for managed Neatlogs.     |
 | `WorkflowName`  | `string`   | Logical name for this service/workflow.                        |
 | `Tags`          | `[]string` | Free-form tags stamped on traces.                              |
 | `Debug`         | `bool`     | Verbose SDK logging.                                           |
@@ -75,4 +75,4 @@ defer shutdown(ctx)
 
 1. `Init` is called exactly once, near process start.
 2. `defer shutdown(ctx)` sits right after the error check.
-3. No invented Config fields — only the six above exist.
+3. No invented Config fields — only the six above exist. Do not set `Endpoint` or `NEATLOGS_ENDPOINT` for managed Neatlogs.

@@ -12,11 +12,10 @@ import neatlogs
 @neatlogs.span(kind="WORKFLOW", name="math_session")
 def main():
     agent = neatlogs.strands_hooks(build_agent())
-    with neatlogs.trace("math_session"):
-        for q in questions:
-            neatlogs.log("asking: {q}", q=q)
-            answer = str(agent(q))       # native agent/llm/tool spans nest under WORKFLOW
-            neatlogs.log("done")
+    for q in questions:
+        neatlogs.log("asking: {q}", q=q)
+        answer = str(agent(q))       # native agent/llm/tool spans nest under WORKFLOW
+        neatlogs.log("done")
 ```
 
 Hierarchy: `WORKFLOW(math_session) > agent(invoke_agent) > llm / tool`.
@@ -37,5 +36,6 @@ If the function is a one-line pass-through to `agent(...)`, don't decorate it.
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps, not a single agent call.
-- `neatlogs.trace("name")` — group operations.
+- `@neatlogs.span(kind="EVALUATOR"|"MEMORY")` — an ordinary application-owned evaluator or memory function; evaluator function input/output and errors are captured automatically.
+- `neatlogs.trace("name", kind=...)` — the sole span for the only kinds `@span` rejects (`LLM`, `RERANKER`, and `VECTOR_STORE`), or for a raw/custom operation with no decorator boundary or direct canonical metadata needs (for example, a DeepEval callback); never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

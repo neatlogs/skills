@@ -16,6 +16,8 @@ import json
 import neatlogs
 
 async def stream_completion(self, model, system_prompt, contents, payload, url, headers):
+    # This generator must run while the real request/job's eligible
+    # WORKFLOW, CHAIN, AGENT, or MCP_TOOL root is active.
     client = get_raw_api_client()
     accumulated_text: list[str] = []
     prompt_tokens = completion_tokens = total_tokens = 0
@@ -95,13 +97,18 @@ async def stream_completion(self, model, system_prompt, contents, payload, url, 
 If the call isn't streamed, a normal context manager is fine (no early-close needed):
 
 ```python
-with neatlogs.trace("Gemini generate", kind="LLM") as span:
-    span.set_attribute("neatlogs.llm.model_name", model)
-    span.set_attribute("neatlogs.llm.input", json.dumps({"messages": input_messages}))
-    resp = await client.post(url, json=payload, headers=headers)
-    data = resp.json()
-    span.set_attribute("neatlogs.llm.output", json.dumps({"role": "assistant", "content": output_text}))
-    span.set_attribute("neatlogs.llm.token_count.prompt", data["usageMetadata"]["promptTokenCount"])
-    span.set_attribute("neatlogs.llm.token_count.completion", data["usageMetadata"]["candidatesTokenCount"])
-    span.set_attribute("neatlogs.llm.token_count.total", data["usageMetadata"]["totalTokenCount"])
+with neatlogs.trace("chat_request", kind="WORKFLOW"):
+    with neatlogs.trace("Gemini generate", kind="LLM") as span:
+        span.set_attribute("neatlogs.llm.model_name", model)
+        span.set_attribute("neatlogs.llm.provider", "google")
+        span.set_attribute("neatlogs.llm.input", json.dumps({"messages": input_messages}))
+        resp = await client.post(url, json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        span.set_attribute("neatlogs.llm.output", json.dumps({"role": "assistant", "content": output_text}))
+        span.set_attribute("neatlogs.llm.token_count.prompt", data["usageMetadata"]["promptTokenCount"])
+        span.set_attribute("neatlogs.llm.token_count.completion", data["usageMetadata"]["candidatesTokenCount"])
+        span.set_attribute("neatlogs.llm.token_count.total", data["usageMetadata"]["totalTokenCount"])
 ```
+
+A manual LLM span is not an eligible root. For the streaming form, establish the real app-owned eligible root around consumption of the generator; do not invent a placeholder root merely for display.

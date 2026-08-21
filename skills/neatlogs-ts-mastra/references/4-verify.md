@@ -33,7 +33,7 @@ import { projectManagerAgent } from "./agents"; // calling this unwrapped path =
 
 ## 3. Don't double-wrap
 
-- Do NOT also put `span()`/`trace()` around a wrapped Mastra call — `wrapMastra` already opens the parent span. (A `span()` WORKFLOW grouping multiple separate calls is fine; never wrap a single already-wrapped call.)
+- Do NOT also put `span()`/`trace()` around a wrapped Mastra call — `wrapMastra` already opens the parent span. Add one app-owned `WORKFLOW` only when a user-facing request/job performs meaningful pre/post work or coordinates multiple wrapped entities; never wrap a single already-wrapped call.
 - `wrapMastra` is idempotent — calling it twice on the same entity is a no-op, not a double-trace.
 
 ## 4. Tools use the Mastra 1.x signature

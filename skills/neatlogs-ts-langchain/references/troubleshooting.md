@@ -133,12 +133,11 @@ await init({ debug: true });
 |-------------|----------------|-----|
 | Wrapping `span({ kind: 'WORKFLOW' })` in `trace()` | Redundant — `span()` already creates a span | Just call the wrapped function directly |
 | Using `trace()` for custom functions where `span()` would work | That's what `span()` is for | Use `span({ kind: 'CHAIN' })` or the appropriate kind |
-| Calling `.compile()` outside `trace()` callback | Variable bindings won't be captured on the span | Move `.compile()` inside the `trace()` callback |
 | Passing `instrumentations: ['openai']` (or any provider/framework key) | `init()` **throws** | Remove the key; use `wrapOpenAI(client)` etc. |
 | Leaving a client unwrapped | Its LLM calls won't be traced | Apply the helper to every provider client your code constructs |
-| Using `span({ kind: 'RERANKER' })` or `span({ kind: 'VECTOR_STORE' })` | `span()` throws Error for invalid kinds | Use `trace({ name: '...', kind: 'RERANKER' })` instead |
+| Using `span({ kind: 'RERANKER' })` or `span({ kind: 'VECTOR_STORE' })` | `span()` throws Error for invalid kinds | Below an eligible root, use `trace({ name: '...', kind: 'RERANKER' as any })`; the cast is required by the current narrow type declaration |
 | Using dynamic `import()` "so instrumentation applies" | Pointless — helpers patch instances, not modules | Use a plain static `import` |
-| Using `span({ kind: 'LLM' })` | `LLM` is not a valid kind for `span()` | Use `trace({ name: '...', kind: 'LLM' })` |
+| Using `span({ kind: 'LLM' })` | `LLM` is not a valid kind for `span()` | For an unsupported/raw call below an eligible root only, use `trace({ name: '...', kind: 'LLM' as any })`; otherwise use the supported wrapper/integration |
 
 ---
 
@@ -146,16 +145,24 @@ await init({ debug: true });
 
 **Symptom**: A chat/agent step shows its parent AGENT span with no children in the UI.
 
+This section applies only to a raw HTTP or unsupported SDK call with no wrapper,
+handler, hook, processor, or instrumentor. Automatically captured calls must
+not get another manual LLM trace.
+
 **Root cause**: `trace()` stamps `neatlogs.internal = true` on every span by default. The backend drops internal LLM spans when it expects an auto-instrumented sibling.
 
 **Fix**: Opt out of the internal flag inside the callback:
 
 ```typescript
-await trace({ name: 'raw_api_llm_call', kind: 'LLM' }, async (span) => {
-  span.setAttribute('neatlogs.internal', false);   // ← required
-  // ... rest of span setup, API call, attribute writes ...
-});
+await trace({ name: 'raw_api_request', kind: 'WORKFLOW' }, async () =>
+  trace({ name: 'raw_api_llm_call', kind: 'LLM' as any }, async (span) => {
+    span.setAttribute('neatlogs.internal', false);   // required
+    // ... canonical input/model, API call, output/usage/error writes ...
+  }),
+);
 ```
+
+If a real eligible `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` parent is already active, reuse it instead of adding the example root. A manual `LLM` cannot finalize as a parentless root.
 
 > Do NOT override `neatlogs.internal = false` on a `trace()` that wraps a call a `wrap*` helper already traces. The wrapper's own LLM span IS the canonical record — leaving the internal flag in place correctly removes the redundant outer span.
 

@@ -24,7 +24,7 @@ Set the canonical `neatlogs.*` names exactly — the backend only renders keys i
 
 | Purpose | Attribute |
 |---|---|
-| span kind | `neatlogs.span.kind` (set `'LLM'`; or set `openinference.span.kind='LLM'` on a raw OTel span — see streaming below) |
+| span kind | `neatlogs.span.kind` (the `trace({ kind: 'LLM' })` call sets it) |
 | dashboard visibility | `neatlogs.internal` → **`false`** on a manual LLM span with no auto-instrumented sibling (else the backend drops it) |
 | model | `neatlogs.llm.model_name` |
 | provider | `neatlogs.llm.provider` |
@@ -38,6 +38,8 @@ Set the canonical `neatlogs.*` names exactly — the backend only renders keys i
 
 (These match the Python SDK's `config/attribute-mapping.json` one-for-one. If you need a key not listed, check `neatlogs-py-setup/references/llm-call-patterns.md` "Authoritative attribute names" — the canonical set is shared across both SDKs.)
 
+The runtime accepts the extended `LLM` kind on `trace()`, but the current TypeScript declaration limits `TraceOptions.kind` to decorator-safe kinds. Use `kind: 'LLM' as any` only at this unsupported/raw boundary; do not switch to `span()`, which rejects `LLM` at runtime.
+
 ---
 
 ## Non-streaming → use the `trace()` callback
@@ -48,12 +50,15 @@ Set the canonical `neatlogs.*` names exactly — the backend only renders keys i
 import { trace } from 'neatlogs';
 
 async function rawGeminiCall(model: string, inputMessages: any[], payload: object, url: string, headers: Record<string,string>) {
-  return await trace({ name: 'Gemini generate', kind: 'LLM' }, async (span) => {
+  return await trace({ name: 'raw_gemini_request', kind: 'WORKFLOW' }, async () =>
+    trace({ name: 'Gemini generate', kind: 'LLM' as any }, async (span) => {
     span.setAttribute('neatlogs.internal', false);
+    span.setAttribute('neatlogs.llm.provider', 'google');
     span.setAttribute('neatlogs.llm.model_name', model);
     span.setAttribute('neatlogs.llm.input', JSON.stringify({ messages: inputMessages }));
 
     const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    if (!resp.ok) throw new Error('LLM request failed: ' + resp.status);
     const data = await resp.json();
 
     // Field paths per provider — see the Python wire-format ref (§A–§D).
@@ -65,89 +70,31 @@ async function rawGeminiCall(model: string, inputMessages: any[], payload: objec
     span.setAttribute('neatlogs.llm.token_count.completion', u.candidatesTokenCount ?? 0);
     span.setAttribute('neatlogs.llm.token_count.total', u.totalTokenCount ?? 0);
     return data;
-  });
+    }),
+  );
 }
 ```
+
+The explicit `WORKFLOW` is required because a manual `LLM` cannot finalize as
+a parentless root. Omit that extra root only when a real eligible
+`WORKFLOW`/`CHAIN`/`AGENT`/`MCP_TOOL` parent is already active. Supported
+wrappers self-root and must not be placed inside this manual LLM pattern.
 
 ---
 
-## Streaming → `trace()` CANNOT bracket a stream; use raw OTel start/end
+## Streaming raw HTTP
 
-The `trace()` callback closes its span the moment the callback returns. A streaming response is an **async iterator that yields to the consumer over time** — you must keep the span open across yields and close it at a precise point. Use the underlying OpenTelemetry tracer directly (the same one `trace()` uses) so you control `startSpan()` / `end()` explicitly — the TS equivalent of Python's `__enter__` / `__exit__`.
+A `trace()` callback closes when its callback settles, so returning a stream or
+async iterator from that callback closes the LLM span before the stream is
+consumed. Do not work around this with
+`@opentelemetry/api.trace.getTracer(...).startSpan()`: Neatlogs uses a private
+tracer provider, and a span from the global provider is not a Neatlogs span and
+will not be exported by Neatlogs.
 
-```typescript
-import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
-
-async function* streamGemini(model: string, inputMessages: any[], payload: object, url: string, headers: Record<string,string>) {
-  const tracer = otelTrace.getTracer('neatlogs.trace');
-
-  // 1. Open the LLM span BEFORE the stream; set INPUT now.
-  const span = tracer.startSpan('Gemini generate');
-  span.setAttribute('neatlogs.internal', false);
-  span.setAttribute('openinference.span.kind', 'LLM');  // what trace() sets internally
-  span.setAttribute('neatlogs.llm.model_name', model);
-  span.setAttribute('neatlogs.llm.input', JSON.stringify({ messages: inputMessages }));
-
-  let textParts: string[] = [];
-  let prompt = 0, completion = 0, total = 0;
-  let finished = false, spanEnded = false;
-
-  try {
-    const resp = await fetch(`${url}?alt=sse`, { method: 'POST', headers, body: JSON.stringify(payload) });
-    const reader = resp.body!.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() ?? '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = JSON.parse(line.slice(6));
-
-        // 2. Accumulate text + tokens across chunks (paths per provider).
-        const t = chunk.candidates?.[0]?.content?.parts?.map((p: any) => p.text).filter(Boolean).join('');
-        if (t) { textParts.push(t); yield t; }
-        if (chunk.usageMetadata) {       // last chunk carries cumulative usage — don't sum
-          prompt = chunk.usageMetadata.promptTokenCount ?? prompt;
-          completion = chunk.usageMetadata.candidatesTokenCount ?? completion;
-          total = chunk.usageMetadata.totalTokenCount ?? total;
-        }
-
-        if (chunk.candidates?.[0]?.finishReason) {
-          finished = true;
-          // 3. Attach OUTPUT + TOKENS once the stream is complete.
-          span.setAttribute('neatlogs.llm.output', JSON.stringify({ role: 'assistant', content: textParts.join('') }));
-          span.setAttribute('neatlogs.llm.token_count.prompt', prompt);
-          span.setAttribute('neatlogs.llm.token_count.completion', completion);
-          span.setAttribute('neatlogs.llm.token_count.total', total);
-          // 4. End the span BEFORE the final yield (see WHY below).
-          span.end();
-          spanEnded = true;
-        }
-      }
-    }
-  } catch (err) {
-    span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
-    throw err;
-  } finally {
-    // 5. Double-end guard: close exactly once whether the stream finished,
-    //    errored, or the consumer abandoned the generator.
-    if (!finished) {
-      span.setAttribute('neatlogs.llm.output', JSON.stringify({ role: 'assistant', content: textParts.join('') }));
-    }
-    if (!spanEnded) span.end();
-  }
-}
-```
-
-### The two rules that are easy to get wrong (same as Python)
-
-1. **`end()` before the consumer's next operation, not only in `finally`.** A generator hands control back on every `yield`. If the span is still open (active) when the consumer starts its next operation, that operation nests as a CHILD of this LLM span instead of a sibling — a wrong trace tree. End it before the terminal work. The `spanEnded` flag keeps `finally` from double-ending.
-
-2. **`end()` exactly once.** A generator can exit by completion, exception, or abandonment (the consumer stops iterating). The `finally` + `spanEnded` guard closes it once in all three. Double `end()` on an OTel span is a bug.
-
-> Note: raw `startSpan()` does NOT auto-nest under the current active span the way `trace()` does. If this streaming call must nest under a parent span, start it within the parent's context: `otelContext.with(otelTrace.setSpan(otelContext.active(), parentSpan), () => tracer.startSpan(...))`, or open it inside the parent `trace()`/`span()` scope.
+Prefer a supported provider SDK and its Neatlogs wrapper for streaming. If raw
+HTTP is unavoidable, consume and accumulate the complete bounded response
+inside the manual `LLM` callback, set final output, usage, finish reason, and
+errors before it settles, and only then return buffered data. If the application
+must expose chunks incrementally and no supported capture owner exists, report
+streaming capture as unsupported instead of claiming a partial or globally
+exported span.

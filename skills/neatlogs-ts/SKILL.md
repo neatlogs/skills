@@ -3,14 +3,14 @@ name: neatlogs-ts
 description: >
   NeatLogs is an AI agent debugging and observability platform. Use this skill when
   instrumenting TypeScript/Node.js LLM applications with neatlogs for tracing, monitoring,
-  debugging, observability, spans, prompt template tracking, or auto-instrumentation of
+  debugging, observability, spans, or instrumentation of
   LLM providers and agent frameworks.
 ---
 
 # NeatLogs TypeScript SDK — Agent Skill
 
 NeatLogs auto-instruments LLM calls, agent frameworks, and custom code with these core exports:
-`init()`, `flush()`, `shutdown()`, `span()`, `Span()`, `trace()`, `identify()`, `log()`, `PromptTemplate`, and `UserPromptTemplate`.
+`init()`, `flush()`, `shutdown()`, `span()`, `Span()`, `trace()`, `identify()`, and `log()`.
 
 ---
 
@@ -31,7 +31,8 @@ Requires Node.js >= 18.
 
 1. **Import order does NOT matter**: instrumentation is per-instance via a `wrap*` helper (`wrapOpenAI(new OpenAI())`), so static top-of-file imports are fine. No dynamic `import()` gymnastics.
 2. **Scripts**: end with `await flush()` then `await shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` or `shutdown()` on every request.
-3. **Use `span()` wrappers** for custom code; use `trace()` callback wrapper for prompt template tracking or custom attributes.
+3. **One capture owner per operation**: a provider/framework wrapper, handler, hook, or processor owns the spans for calls it captures. Use `span()` for your own orchestration. Use `trace()` for custom attributes or a manual LLM span only when no supported capture layer owns that operation.
+4. **Managed endpoint is automatic**: omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already exports to `https://ingest.neatlogs.com`. Preserve an explicit endpoint only for a confirmed self-hosted deployment.
 4. **NEVER pass `instrumentations: [...]` for a provider or framework — `init()` THROWS.** Every provider/framework key (`openai`, `anthropic`, `langchain`, `bedrock`, `mcp`, `beeai`, `claude_agent_sdk`, `google_genai`, `mastra`, `ai_sdk`, `azure_openai`, `vertexai`, `openrouter_agent`, `opencode`) is rejected because its auto-instrumentor drives the **global** OTel context and cannot be isolated. Use the explicit helper from the [Supported Instrumentations](#supported-instrumentations) table.
 5. **Init is single-shot**: `init()` configures a **private** telemetry provider (never registered globally — see [OTel Isolation](#otel-isolation)). Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
 6. **All lifecycle functions are async**: `init()`, `flush()`, and `shutdown()` return Promises and must be awaited.
@@ -80,9 +81,23 @@ await shutdown();
 2. **Instrument**: Choose the correct approach:
    - Providers/frameworks → the matching `wrap*` helper / handler / processor (see [Supported Instrumentations](#supported-instrumentations))
    - `span()` wrappers for custom orchestration code
-   - `trace()` for prompt template tracking or custom span attributes
+   - `trace()` for custom span attributes and unsupported/raw operations only—never around a call already owned by a wrapper, handler, hook, processor, or instrumentor
 3. **Init**: Add `await init()` once at startup, with **no** `instrumentations` key.
-4. **Verify**: Check the NeatLogs dashboard for incoming traces.
+4. **Verify**: build/typecheck the changed project, restart any server/startup process, exercise the real instrumented path, and confirm a new NeatLogs trace with one canonical span per operation.
+
+For a generic Next.js retrieval-and-generation example, see [Retrieval-and-generation workflow verification](references/retrieval-generation-workflow.md).
+
+## Completion gate
+
+- Show concise progress for install, edits, build, restart, runtime verification, and platform confirmation; never print secrets.
+- Run the project's existing build/typecheck/test commands after editing. Restart long-running processes so new startup instrumentation is actually loaded.
+- Exercise a safe representative path and confirm its trace reaches the target project. This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
+- For the representative run, generate two distinct UUIDs: a process marker and an exercise nonce. Append `neatlogs.verification.marker=<marker UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries and scoping it only to the launched process; do not edit source or persistent configuration, and do not treat either value as a secret. Put the exact token `neatlogs-verification:<nonce UUID>` in a safe representative user request, prompt, or API argument that exercises the real path and should be captured in a persisted span `input_value`. Immediately before the exercise, record the current UTC timestamp. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with the temporary marker and which nonce token to submit. If the path cannot safely carry a unique captured input, report that blocker and leave verification incomplete.
+- After the exercised request finishes, flush telemetry and gracefully stop the marked process or relaunch it without the marker before discovery. If marked trace production cannot be quiesced, leave verification incomplete. Then call the already-connected Neatlogs platform MCP with `get_trace_context(verification_marker=<marker UUID>, candidate_offset=0)`. Enumerate offsets from 0 upward, collecting distinct trace IDs until MCP returns `No project trace found` for the next offset. For every candidate, page its complete span set with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null. A candidate qualifies only when the exact nonce token appears in a persisted span `input_value`, its top-level `name` and `workflow` plus parentless root span match the exercised path, its `created_at` is not earlier than the recorded timestamp, `root_span_count` is 1, and no span has `synthetic_recovery_root: true`. Never select the first or latest marker match. If no trace qualifies yet, poll every 5 seconds and repeat the full enumeration for up to 2 minutes. Restart a scan if offsets shift and duplicate a trace ID; if a complete distinct scan cannot be obtained, offset 100 still returns a candidate, or zero or multiple traces qualify, report the ambiguity and leave verification incomplete.
+- Once exactly one trace qualifies, poll that exact `trace_id` every 5 seconds for up to 2 minutes while `status` is `processing` or `finalization_status` is `pending`. If it does not reach `finalized` within that bound, leave verification incomplete. Treat a null or unrecognized `finalization_status` as a hosted-contract blocker. After `finalization_status` is `finalized`, require `trace_context_contract_version: 2`, `verification_ready: true`, `span_payload_complete: true`, `span_tree_complete: true`, and `root_span_count: 1`; otherwise report a hosted-contract or incomplete-payload blocker. Page all spans again and perform two identical full marker-candidate enumerations at least 10 seconds apart to confirm that exactly one trace contains the nonce in both scans. Verify that all `span_count` spans were inspected.
+- If `get_trace_context` rejects `verification_marker`, `candidate_offset`, `trace_id`, or `offset`, or omits `trace_context_contract_version`, `verification_ready`, `span_payload_complete`, `span_tree_complete`, `root_span_count`, `trace_id`, `name`, `workflow`, `created_at`, `spans[].parent_span_id`, `spans[].input_value`, `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query.
+- If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` (or `npx @neatlogs/wizard mcp --api-key <PROJECT_KEY>`) in the coding agent and store the project key as a client secret. Never print or request it in chat; leave verification incomplete if access cannot be established.
+- Do not claim success from source inspection or an offline/no-export check. Inspect the full persisted span tree and returned semantic fields, not only a trace-list summary or local debug output. Confirm the nonce-qualified project trace is the fresh run, with one span per semantic operation and no duplicates. If live ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ---
 
@@ -112,8 +127,6 @@ await init(options);
 | `piiSpanTypes` | `string[]` | `undefined` | Override which span types have PII redaction |
 | `mask` | `MaskFunction` | `undefined` | Client-side mask function |
 | `metadata` | `Record<string, any>` | `undefined` | Custom metadata to attach to all spans |
-| `endpoint` | `string` | `'https://ingest.neatlogs.com'` | Backend endpoint URL |
-| `baseUrl` | `string` | `undefined` | Base URL for the Neatlogs API |
 | `tracerProvider` | `BasicTracerProvider` | `undefined` | Caller-owned private provider. Neatlogs adds its processors + flushes it, but never registers it globally or shuts it down |
 | `registerShutdownHandlers` | `boolean` | `true` when Neatlogs owns the provider, else `false` | Register `beforeExit`/`SIGTERM`/`SIGINT` flush + shutdown handlers |
 
@@ -243,7 +256,6 @@ For deep dives, see the companion reference files:
 
 - **Custom instrumentation** with `span()`, `Span()`, and `trace()` → [`references/decorators-and-traces.md`](references/decorators-and-traces.md)
 - **Raw HTTP LLM calls** (fetch/undici/axios — wrappers are BLIND, need manual spans; streaming lifecycle + per-provider field paths) → [`references/raw-http-llm.md`](references/raw-http-llm.md)
-- **Prompt template** tracking and management → [`references/prompt-templates.md`](references/prompt-templates.md)
 - **Framework-specific** integration patterns → [`references/framework-integrations.md`](references/framework-integrations.md)
 - **Troubleshooting** and common mistakes → [`references/troubleshooting.md`](references/troubleshooting.md)
 - **Multiple independent workflows in one codebase** (a copilot + a summarizer + a background job, each a distinct dashboard workflow) → use the `neatlogs-multi-workflow` skill. `workflowName` on `init()` is process-wide/single-shot; give each feature its own `WORKFLOW` root via `trace({ name, kind: 'WORKFLOW', attributes: { 'neatlogs.workflow.name': ... } }, …)`.
