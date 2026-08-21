@@ -33,7 +33,7 @@ Requires Node.js >= 18.
 2. **Scripts**: end with `await flush()` then `await shutdown()`. **Servers**: call `init()` once at startup; do NOT call `flush()` or `shutdown()` on every request.
 3. **One capture owner per operation**: a provider/framework wrapper, handler, hook, or processor owns the spans for calls it captures. Use `span()` for your own orchestration. Use `trace()` for custom attributes or a manual LLM span only when no supported capture layer owns that operation.
 4. **Managed endpoint is automatic**: omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already exports to `https://ingest.neatlogs.com`. Preserve an explicit endpoint only for a confirmed self-hosted deployment.
-4. **NEVER pass `instrumentations: [...]` for a provider or framework — `init()` THROWS.** Every provider/framework key (`openai`, `anthropic`, `langchain`, `bedrock`, `mcp`, `beeai`, `claude_agent_sdk`, `google_genai`, `mastra`, `ai_sdk`, `azure_openai`, `vertexai`, `openrouter_agent`, `opencode`) is rejected because its auto-instrumentor drives the **global** OTel context and cannot be isolated. Use the explicit helper from the [Supported Instrumentations](#supported-instrumentations) table.
+4. **NEVER pass `instrumentations: [...]`.** The public option and registry are removed. TypeScript rejects the property, and the JavaScript compatibility guard throws a typed configuration error before telemetry starts. Use the explicit helper from the [Supported Instrumentations](#supported-instrumentations) table.
 5. **Init is single-shot**: `init()` configures a **private** telemetry provider (never registered globally — see [OTel Isolation](#otel-isolation)). Calling it again is a no-op (with a warning). Call `shutdown()` first to reinitialize (rare).
 6. **All lifecycle functions are async**: `init()`, `flush()`, and `shutdown()` return Promises and must be awaited.
 7. **Named imports**: Always use named imports from `'neatlogs'`.
@@ -87,7 +87,21 @@ await shutdown();
 
 For a generic Next.js retrieval-and-generation example, see [Retrieval-and-generation workflow verification](references/retrieval-generation-workflow.md).
 
-## Completion gate
+## Doctor gate
+
+Before editing, run this read-only preflight from the application root:
+
+```bash
+npx --yes @neatlogs/wizard@latest doctor --local --json --install-dir .
+```
+
+Require `doctor_version: 1` and `schema_version: 2`. Treat `application_exercised: false` and `capture_scope: "wizard_sdk_fixture"` literally: local doctor validates static target configuration plus the wizard's normalized in-memory SDK fixture; it is not proof that this application's runtime or the backend worked.
+
+Only remediate a failed check when `fixable: true`: `INSTRUMENTOR_NOT_ACTIVE` means install/initialize using this skill; `ATTRIBUTE_CONFLICT` means apply only the conflict named in the check; `MISSING_API_KEY` means configure the key through the user's secret/environment mechanism, never source or chat. Do not edit for any other code or for warnings such as `PROJECT_OWNERSHIP_AMBIGUOUS`; report the exact check instead.
+
+After the project checks/build and a real-path exercise, run `npx --yes @neatlogs/wizard@latest doctor --probe --json --install-dir .` with `NEATLOGS_API_KEY` supplied through the process environment. If it returns `BACKEND_DIAGNOSTIC_UNAVAILABLE`, no probe was sent: report that deployment blocker and leave diagnostic-stage verification incomplete. Never substitute a local span log, package installation, or an uncorrelated latest trace for doctor/backend evidence. The marker-correlated platform completion gate below remains a separate persistence check.
+
++## Completion gate
 
 - Show concise progress for install, edits, build, restart, runtime verification, and platform confirmation; never print secrets.
 - Run the project's existing build/typecheck/test commands after editing. Restart long-running processes so new startup instrumentation is actually loaded.
@@ -112,7 +126,6 @@ await init(options);
 |---|---|---|---|
 | `apiKey` | `string` | `undefined` | API key (or set `NEATLOGS_API_KEY` env var). If neither is set, spans are created locally but **silently not exported** |
 | `workflowName` | `string` | derived from `process.argv[1]` | Name for this workflow/application |
-| `instrumentations` | `string[]` | `undefined` | **Do not use.** `init()` THROWS for every provider/framework key — see [Core Principles](#core-principles) #4 and [Why the instrumentations key throws](#why-the-instrumentations-key-throws) |
 | `tags` | `string[]` | `undefined` | Tags for filtering in dashboard |
 | `userId` | `string` | `undefined` | The **operator** running the SDK (developer / service account), NOT your app's end-user. For end-user & session identity, see [Sessions & End-Users](#sessions--end-users) |
 | `sampleRate` | `number` | `1.0` | Sampling rate (0.0 to 1.0) |
@@ -121,7 +134,6 @@ await init(options);
 | `debug` | `boolean` | `false` | Enable verbose logging |
 | `disableExport` | `boolean` | `false` | Disable span export to backend |
 | `captureLogs` | `boolean` | `false` | Capture `log()` calls as LOG spans |
-| `traceContent` | `boolean` | `true` | Whether to capture input/output content |
 | `pii` | `'redact' \| 'hash' \| false` | `undefined` | PII detection setting |
 | `piiEnabled` | `boolean` | `undefined` | Override team-level server-side PII redaction |
 | `piiSpanTypes` | `string[]` | `undefined` | Override which span types have PII redaction |
@@ -230,9 +242,9 @@ namespace. `neatlogs.retrieval.*` is an ingestion-only legacy alias.
 
 The direct provider wrappers (`wrapOpenAI`, `wrapAnthropic`, `wrapAzureOpenAI`, `wrapBedrock`, `wrapGoogleGenAI`, `wrapVertexAI`, `wrapOpenRouterAgent`) also **auto-open a `WORKFLOW` root** when a call would otherwise be parentless, so a lone wrapped call renders on its own. Framework helpers root themselves.
 
-### Why the instrumentations key throws
+### Why the instrumentations key was removed
 
-`init()` validates the list against the registry and rejects any key that loads an auto-instrumentor, because OpenInference/OTel-contrib instrumentors create *and* activate spans on the **global** OTel context — a private provider can't isolate that in either direction. The error names the replacement:
+Global OpenInference/OTel-contrib instrumentors create and activate spans on process-global context, which a private Neatlogs provider cannot isolate in either direction. The TypeScript SDK therefore has no public `instrumentations` option or runtime registry. A compatibility guard rejects the removed property before initialization and points to explicit per-instance helpers:
 
 ```
 The "openai" auto-instrumentation uses the global OpenTelemetry context and cannot
@@ -242,9 +254,7 @@ Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing. Neatlogs does not
 support shared global-context instrumentation.
 ```
 
-Keys that load nothing (`crewai`, `litellm`, `cohere`, `groq`, `llamaindex`, and the vector-DB keys) are accepted but are **no-ops** — they patch nothing. Don't pass them either; they achieve nothing.
-
-> This is the opposite of the **Python** SDK, where `instrumentations=[...]` is the primary path. Do not port a Python snippet's `instrumentations` list into TypeScript.
+No provider/framework key is accepted, including formerly advertised no-op keys. Python retains a limited fallback `instrumentations=[...]` path for uncovered providers; do not port that list into TypeScript.
 
 > **HTTP auto-instrumentation** (fetch/undici) is always enabled by `init()` for trace context propagation — nothing to configure.
 
@@ -268,7 +278,6 @@ For deep dives, see the companion reference files:
 |---|---|
 | `NEATLOGS_API_KEY` | API key (alternative to `apiKey` param) |
 | `NEATLOGS_DISABLE_EXPORT` | Set to `"true"` to disable span export |
-| `NEATLOGS_TRACE_CONTENT` | Set to `"false"` to disable input/output capture |
 
 ---
 

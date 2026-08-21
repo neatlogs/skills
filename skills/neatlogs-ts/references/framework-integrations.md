@@ -2,7 +2,7 @@
 
 Framework-specific integration patterns for the NeatLogs TypeScript SDK. Covers the wrapper for each supported LLM provider and agent framework, plus representative code examples.
 
-> **`init({ instrumentations: [...] })` THROWS for every provider/framework key.** Instrumentation is always an explicit helper applied to the object — see [Supported Instrumentations](../SKILL.md#supported-instrumentations). Because helpers patch the **instance**, not the module, import order never matters.
+> **The public `instrumentations` option and registry are removed.** TypeScript rejects the property and the JavaScript compatibility guard throws before telemetry starts. Instrumentation is always an explicit helper applied to the object — see [Supported Instrumentations](../SKILL.md#supported-instrumentations). Because helpers patch the **instance**, not the module, import order never matters.
 
 ---
 
@@ -353,7 +353,7 @@ The Vercel AI SDK emits its own `ai.*` namespace; the SDK's `UnifiedAttributePro
 
 ### Note on `init({ instrumentations: ['ai_sdk'] })`
 
-`ai_sdk` exists in the instrumentation registry for scope-detection consistency, but passing it to `init()` **throws** (its registry entry names an instrumentor module, so the isolation gate rejects it). `wrapAISDK(ai)` is the only path.
+There is no `ai_sdk` registry entry or public `instrumentations` option. Passing the removed property triggers the compatibility guard; `wrapAISDK(ai)` is the only path.
 
 ---
 
