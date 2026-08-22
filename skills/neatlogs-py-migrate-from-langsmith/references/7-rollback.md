@@ -11,11 +11,10 @@ a fix is developed.
 
 Restore the original LangSmith routing in a single env-var flip,
 without touching code. The NeatLogs init and span code stays in
-the codebase but is a no-op (the NeatLogs dashboard will simply
-not receive new traces). This is the cleanest rollback: the app
-goes back to exactly the state it was in before the migration
-started, and you keep the migration code in git for the next
-attempt.
+the codebase but is a no-op (the NeatLogs dashboard will not
+receive new traces). This is the cleanest rollback: the app goes
+back to exactly the state it was in before the migration started,
+and you keep the migration code in git for the next attempt.
 
 ## Action
 

@@ -10,22 +10,22 @@ metadata:
 
 # NeatLogs — Migrate from LangSmith to NeatLogs
 
-This skill is for a Python project that **already instruments with
-LangSmith** (the `langsmith` SDK or LangChain auto-tracing) and wants
-to switch to NeatLogs. It is **not** a greenfield install path —
-start with `neatlogs-py` if you have nothing yet.
+This skill is for a Python project that already instruments with
+LangSmith (the `langsmith` SDK or LangChain auto-tracing) and wants
+to switch to NeatLogs. It is not a greenfield install path. Start
+with `neatlogs-py` if you have nothing yet.
 
-The headline insight: **most LangSmith users finish this migration by
-changing 2 environment variables** (step 4). The decorator-mapping
-fallback (step 5) is only needed for projects using the explicit
-`@traceable` SDK path with custom RunTree logic.
+Most LangSmith users finish this migration by changing 2 environment
+variables (step 4). The decorator-mapping fallback (step 5) is only
+needed for projects using the explicit `@traceable` SDK path with
+custom RunTree logic.
 
-## The two LangSmith v0.x paths (read first)
+## The two LangSmith v0.x paths
 
 | Path | How you set LangSmith up today | Migration path |
 |---|---|---|
-| **A. Auto-tracing via OTel** (~90% of users) | You set `LANGSMITH_TRACING_V2=true` + `LANGSMITH_API_KEY=...` and let LangChain's `langchain.observability` callback (or the `langchain.tracing` context manager) export traces via OTel | **Step 4 only** — change `OTEL_EXPORTER_OTLP_ENDPOINT` and the auth header. No code changes. |
-| **B. Explicit `@traceable` SDK** (~10% of users) | You `from langsmith import traceable` (or `from langsmith import trace`) and call `langsmith_client.create_run(...)` / `RunTree(...)` directly | **Steps 4 + 5** — endpoint swap plus a code pass to replace LangSmith SDK calls with NeatLogs spans. |
+| **A. Auto-tracing via OTel** (~90% of users) | You set `LANGSMITH_TRACING_V2=true` + `LANGSMITH_API_KEY=...` and let LangChain's `langchain.observability` callback (or the `langchain.tracing` context manager) export traces via OTel | **Step 4 only.** Change `OTEL_EXPORTER_OTLP_ENDPOINT` and the auth header. No code changes. |
+| **B. Explicit `@traceable` SDK** (~10% of users) | You `from langsmith import traceable` (or `from langsmith import trace`) and call `langsmith_client.create_run(...)` / `RunTree(...)` directly | **Steps 4 + 5.** Endpoint swap plus a code pass to replace LangSmith SDK calls with NeatLogs spans. |
 
 Path detection is in step 1 below. Skip step 5 if you're on Path A.
 
@@ -84,6 +84,6 @@ Path detection is in step 1 below. Skip step 5 if you're on Path A.
 - Self-contained. No cross-skill links. Each step file is standalone.
 - For the broader NeatLogs SDK reference (decorator kinds, span types,
   prompt templates), see `references/span-kinds.md` and
-  `references/sessions-and-end-users.md` in this skill folder — they
+  `references/sessions-and-end-users.md` in this skill folder. They
   reproduce only what's needed for the migration; for the full
-  reference, the user can read `neatlogs-py` directly.
+  reference, the user reads `neatlogs-py` directly.

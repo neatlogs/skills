@@ -1,6 +1,6 @@
 # Step 4: OTLP-endpoint swap — the 90% path
 
-## Why this is the headline
+## Why this is the easy path
 
 If step 1 classified you as **Path A (LangChain auto-tracing via
 OTel)** — i.e. your project sets `LANGSMITH_TRACING_V2=true` (or
