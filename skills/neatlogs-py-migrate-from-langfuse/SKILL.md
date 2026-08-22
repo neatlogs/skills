@@ -10,21 +10,20 @@ metadata:
 
 # NeatLogs — Migrate from Langfuse to NeatLogs
 
-This skill is for a Python project that **already instruments with
-Langfuse** and wants to switch to NeatLogs. It is **not** a greenfield
-install path — start with `neatlogs-py` if you have nothing yet.
+This skill is for a Python project that already instruments with
+Langfuse and wants to switch to NeatLogs. It is not a greenfield
+install path. Start with `neatlogs-py` if you have nothing yet.
 
-The headline insight: **most Langfuse v2 users can finish this migration
-by changing 2 environment variables** (step 4). The decorator-mapping
-fallback (step 5) is only needed for projects on the native Langfuse SDK
-path.
+Most Langfuse v2 users finish this migration by changing 2 environment
+variables (step 4). The decorator-mapping fallback (step 5) is only
+needed for projects on the native Langfuse SDK path.
 
-## The two Langfuse v2 paths (read first — which one are you on?)
+## The two Langfuse v2 paths
 
 | Path | How you set Langfuse up today | Migration path |
 |---|---|---|
-| **A. OTel exporter** (90% of v2 users) | You set `OTEL_EXPORTER_OTLP_ENDPOINT=...langfuse...` and use a plain OTel SDK (`opentelemetry-instrumentation-*` or `@trace`-style decorators on `OpenAI()` etc.) | **Step 4 only** — change the endpoint + add the x-api-key header. No code changes. |
-| **B. Native Langfuse SDK** (10% of v2 users) | You `from langfuse import Langfuse; lf = Langfuse(...)` and call `lf.update_current_span(...)` / `lf.score_current_span(...)` / `@observe()` | **Steps 4 + 5** — endpoint swap plus a code pass to replace Langfuse SDK calls with NeatLogs spans. |
+| **A. OTel exporter** (90% of v2 users) | You set `OTEL_EXPORTER_OTLP_ENDPOINT=...langfuse...` and use a plain OTel SDK (`opentelemetry-instrumentation-*` or `@trace`-style decorators on `OpenAI()` etc.) | **Step 4 only.** Change the endpoint and add the x-api-key header. No code changes. |
+| **B. Native Langfuse SDK** (10% of v2 users) | You `from langfuse import Langfuse; lf = Langfuse(...)` and call `lf.update_current_span(...)` / `lf.score_current_span(...)` / `@observe()` | **Steps 4 + 5.** Endpoint swap plus a code pass to replace Langfuse SDK calls with NeatLogs spans. |
 
 Path detection is in step 1 below. Skip step 5 if you're on Path A.
 
@@ -73,6 +72,6 @@ Path detection is in step 1 below. Skip step 5 if you're on Path A.
 - Self-contained. No cross-skill links. Each step file is standalone.
 - For the broader NeatLogs SDK reference (decorator kinds, span types,
   prompt templates), see `references/span-kinds.md` and
-  `references/sessions-and-end-users.md` in this skill folder — they
+  `references/sessions-and-end-users.md` in this skill folder. They
   reproduce only what's needed for the migration; for the full
-  reference, the user can read `neatlogs-py` directly.
+  reference, the user reads `neatlogs-py` directly.

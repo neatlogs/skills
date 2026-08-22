@@ -132,7 +132,7 @@ def web_search(query: str) -> str:
    matches).
 3. All `lf.update_current_span(...)` / `lf.score_current_span(...)` /
    `lf.flush()` / `lf.shutdown()` are replaced.
-4. The app still runs. Triggers a request; verify the same trace
+4. The app still runs. Trigger a request; verify the same trace
    shape appears in the NeatLogs dashboard that previously appeared
    in Langfuse (one WORKFLOW root, nested AGENT/TOOL/LLM children,
    session grouping if the project used sessions).

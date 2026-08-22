@@ -1,6 +1,6 @@
 # Step 4: OTLP-endpoint swap — the 90% path
 
-## Why this is the headline
+## Why this is the easy path
 
 If step 1 classified you as **Path A (OTel exporter)** — i.e. your
 project already routes traces through the OpenTelemetry SDK to a
@@ -70,7 +70,7 @@ some other instrumentation layer.
 
 ## Verify BEFORE moving to step 5 (or step 6)
 
-1. Triggers a request; verify a new trace appears in the NeatLogs
+1. Trigger a request; verify a new trace appears in the NeatLogs
    dashboard within 10 seconds. (Use a simple GET or run a known
    test case.)
 2. Confirm the trace has the right shape: spans nested, tool calls
