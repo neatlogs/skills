@@ -1,6 +1,6 @@
 ---
 name: neatlogs-validate
-description: Use AFTER running any neatlogs-py-* or neatlogs-ts-* (or neatlogs-go) wizard, to confirm the SDK was installed, init()'d, and is actually exporting traces to the dashboard. Runs a 5-check checklist (SDK present in deps, init() called once at process start, NEATLOGS_API_KEY set and not a placeholder, a sample trace reaches the ingest endpoint, no orphan auto-roots) and prints a pass/fail report with a one-line remediation per failed check. Language-agnostic; auto-detects Python (pip) vs TypeScript (npm) vs Go (go list) project. Use this whenever a wizard finishes, or when "is it actually working" is the question.
+description: Use AFTER running any neatlogs-py-* or neatlogs-ts-* (or neatlogs-go) wizard, to confirm the SDK was installed, init()'d, and is actually exporting traces to the dashboard. Runs a 5-check checklist (SDK present in deps, init() called once at process start, NEATLOGS_API_KEY set and not a placeholder, a sample trace reaches the ingest endpoint, no orphan auto-roots) and prints a pass/fail report with a one-line remediation per failed check. Language-agnostic; auto-detects Python (pip) vs TypeScript (npm) vs Go (go list) project. Use this whenever a wizard finishes, or when "is it working" is the question.
 metadata:
   author: neatlogs
   language: any
@@ -9,10 +9,10 @@ metadata:
 # NeatLogs — Post-instrumentation sanity check
 
 Run this **after** any `neatlogs-py-*` / `neatlogs-ts-*` / `neatlogs-go` wizard, or
-whenever the question is "is the SDK actually wired up and exporting?".
+whenever the question is "is the SDK wired up and exporting?".
 
-This is a **read-only checker**. It does not edit code, install packages, or call
-the SDK. It just inspects the project and reports.
+This is a read-only checker. It does not edit code, install packages, or call
+the SDK. It inspects the project and reports.
 
 ## When to use this
 
@@ -151,7 +151,7 @@ succeeds (HTTP 2xx), proving the project is configured end-to-end (key
 accepted, network reachable, not firewalled).
 
 This check needs to run from inside the project's runtime, so the wizard
-should run a tiny one-shot:
+runs a tiny one-shot:
 
 **Python**
 ```python
@@ -243,29 +243,28 @@ NeatLogs validation report
 from the NeatLogs dashboard (Settings → API keys). Re-run this skill after.
 ```
 
-A "clean" run is all 5 checks OK. **Stop here** — the user's question is
-answered. If they want to instrument more (different framework, different
-language), pick the matching wizard; this skill does not extend coverage.
+A clean run is all 5 checks OK. Stop there. The wizard's job ends when the
+report prints. If the user wants to instrument more (different framework,
+different language), they pick the matching wizard; this skill does not
+extend coverage.
 
-## Rules (apply to all checks)
+## Rules
 
-- **Read-only.** This skill inspects; it does not edit. The only side effect
-  is check 4's probe, which sends ONE span to the user's own project. Make
-  this clear to the user before running it.
-- **No SDK upgrade.** If check 1 finds the SDK missing, do NOT install it
-  silently. Tell the user to install + re-run.
+- **Read-only.** The skill inspects; it does not edit. The only side effect
+  is check 4's probe, which sends one span to the user's own project. Make
+  that clear before running.
+- **No SDK upgrade.** If check 1 finds the SDK missing, do not install it
+  silently. Tell the user to install and re-run.
 - **No key check via network probe.** Check 3 reads env, it does not call
-  the NeatLogs API to validate the key. The probe in check 4 is the only
-  network call.
-- **Be specific on the fix line.** Each `Fix:` must be a concrete
-  edit/replacement, not "investigate the dashboard". If a fix is more
-  than one edit, point at the matching wizard, not a step in this skill.
+  the NeatLogs API. The probe in check 4 is the only network call.
+- **Concrete fixes.** Each `Fix:` must be a specific edit, not
+  "investigate the dashboard". If the fix is more than one edit, point at
+  the matching wizard, not at a step in this skill.
 
 ## Reference
 
 - Per-stack instrumentation: pick the right `neatlogs-py-*` /
   `neatlogs-ts-*` / `neatlogs-go` skill.
 - Common gotchas (import order, Pydantic-Settings crash, Next.js crypto
-  build error): see the `troubleshooting.md` reference in each per-stack
-  skill — do not duplicate it here. This skill is a checklist, not
-  documentation.
+  build error): see `troubleshooting.md` in each per-stack skill. This
+  skill is a checklist, not documentation.
