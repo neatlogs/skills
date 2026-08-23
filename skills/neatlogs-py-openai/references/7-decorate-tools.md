@@ -36,7 +36,7 @@ def fetch_context(query_embedding: list[float]) -> list[str]:
 
 ## What is NOT a TOOL
 
-- The LLM call itself — that's captured by the wrapped client + wrapped with `trace(kind="LLM")` in Step 6, NOT a TOOL span.
+- The LLM call itself — the wrapped client owns that canonical LLM span. Do not add a manual LLM or TOOL span around it.
 - Pure utility helpers (string formatting, list manipulation)
 - Functions with < 3 lines of trivial logic
 - Internal helper functions only called by one parent
@@ -56,5 +56,5 @@ def web_search(query: str) -> list[str]:
 
 - Functions that perform I/O, API calls, or significant standalone computation have `@span(kind="TOOL")`.
 - Each TOOL span has `tool_name` and `description` parameters set.
-- The LLM call functions are NOT marked TOOL (they're CHAIN + trace(kind="LLM")).
+- LLM call functions are NOT marked TOOL. Their wrapped/instrumented provider call owns the LLM span; add CHAIN only for genuine multi-step orchestration.
 - Pure utility functions are NOT decorated.

@@ -1,7 +1,6 @@
 ---
 name: neatlogs-py-openai
 description: Use when adding neatlogs observability to a Python project that calls LLM provider SDKs directly (OpenAI, Anthropic, Google GenAI, Groq, etc.) and uses no agent framework.
-compatibility: Neatlogs Wizard Agent
 metadata:
   author: neatlogs
   language: python
@@ -10,7 +9,7 @@ metadata:
 
 # Neatlogs Python Setup — Direct LLM SDK (OpenAI / Anthropic / Google GenAI / …)
 
-This project calls LLM APIs directly (e.g., `client.chat.completions.create()`). There is no agent framework managing tools or chains. You decorate your own orchestration and tool functions manually.
+This project calls LLM APIs directly (e.g., `client.chat.completions.create()`). There is no agent framework managing tools or chains. Wrap supported clients once; decorate only the application's own orchestration and custom tools.
 
 ## Instrumentation — pick the path that matches the provider
 
@@ -50,10 +49,10 @@ Mixing is fine: e.g. wrap an OpenAI client AND `init(instrumentations=["groq"])`
 ## Combine with manual primitives
 
 - `@neatlogs.span(kind="WORKFLOW"|"CHAIN"|"TOOL"|...)` — decorate orchestration / tool functions.
-- `neatlogs.trace("name", kind="LLM", system_prompt_template=…, user_prompt_template=…)` — group a call + capture prompt-template structure for the dashboard.
+- `neatlogs.trace("name", kind="LLM", ...)` — create the canonical LLM span only for an unsupported/raw call that has no wrapper or instrumentor.
 - `neatlogs.log("msg {x}", x=…)` — timestamped steps inside a span.
 
-The captured LLM/EMBEDDING spans nest under whatever `@span`/`trace` is active.
+The captured LLM/EMBEDDING spans nest under your orchestration spans. Do not add a second manual LLM layer around them.
 
 ## Steps
 
@@ -62,7 +61,7 @@ The captured LLM/EMBEDDING spans nest under whatever `@span`/`trace` is active.
 3. **Set environment variables** → `references/3-set-env.md`
 4. **Wrap the LLM client(s)** → `references/4-wrap-client.md`
 5. **Decorate orchestration functions** → `references/5-decorate-functions.md`
-6. **Attach trace() + prompt templates around LLM calls** → `references/6-wrap-llm-calls.md`
+6. **Verify LLM calls have exactly one capture owner** → `references/6-wrap-llm-calls.md`
 7. **Decorate tool functions** → `references/7-decorate-tools.md`
 7.5. **Embeddings: wrapped/instrumented = automatic; custom = decorate** → `references/7.5-embeddings.md`
 8. **Add flush/shutdown** → `references/8-flush-shutdown.md`
@@ -74,9 +73,9 @@ The captured LLM/EMBEDDING spans nest under whatever `@span`/`trace` is active.
 - Prefer `neatlogs.wrap(client)` for OpenAI/Anthropic/Google GenAI; use `init(instrumentations=[...])` only for providers `wrap()` doesn't support. Never both for the same client.
 - Wrap EVERY supported LLM client whose calls you want traced: `client = neatlogs.wrap(client)`. Use the returned reference.
 - Never hardcode API keys in source. Use `os.getenv()`.
+- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
 - Add imports ONLY for what a file actually uses:
-  - File calls `neatlogs.wrap(...)` / `neatlogs.span(...)` / `neatlogs.trace(...)` → add `import neatlogs`.
-  - File only defines `SystemPromptTemplate`/`UserPromptTemplate` objects → add ONLY `from neatlogs import SystemPromptTemplate, UserPromptTemplate`. Do NOT add a bare `import neatlogs` — it would be unused.
+  - File calls `neatlogs.wrap(...)` / `neatlogs.span(...)` / a manual raw-call `neatlogs.trace(...)` → add `import neatlogs`.
 - When present, `import neatlogs` goes at module top level, never inside functions.
 - `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`) — closest to `def`.
 - Minimal edits only. Add wrap()/decorators + imports. Do not reformat, add comments, or refactor.
@@ -90,7 +89,24 @@ Once a client is `wrap()`'d (or its provider is in `instrumentations=[]`), these
 - `client.embeddings.create()` → EMBEDDING span
 - Streaming variants
 
-You DO still add `@span` on your own functions and `neatlogs.trace()` + templates around LLM calls for prompt management.
+You may add WORKFLOW/CHAIN/AGENT spans around genuine multi-step orchestration. Do NOT add `neatlogs.trace(kind="LLM")` around any wrapped or instrumented provider call; the automatic span is canonical.
+
+## Live completion gate (wizard or standalone coding agent)
+
+This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
+
+For the representative run, generate two distinct UUIDs: a process marker and an exercise nonce. Append `neatlogs.verification.marker=<marker UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries and scoping it only to the launched process; do not edit source or persistent configuration, and do not treat either value as a secret. Put the exact token `neatlogs-verification:<nonce UUID>` in a safe representative user request, prompt, or API argument that exercises the real path and should be captured in a persisted span `input_value`. Immediately before the exercise, record the current UTC timestamp. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with the temporary marker and which nonce token to submit. If the path cannot safely carry a unique captured input, report that blocker and leave verification incomplete.
+
+After the exercised request finishes, flush telemetry and gracefully stop the marked process or relaunch it without the marker before discovery. If marked trace production cannot be quiesced, leave verification incomplete. Then call the already-connected Neatlogs platform MCP with `get_trace_context(verification_marker=<marker UUID>, candidate_offset=0)`. Enumerate offsets from 0 upward, collecting distinct trace IDs until MCP returns `No project trace found` for the next offset. For every candidate, page its complete span set with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null. A candidate qualifies only when the exact nonce token appears in a persisted span `input_value`, its top-level `name` and `workflow` plus parentless root span match the exercised path, its `created_at` is not earlier than the recorded timestamp, `root_span_count` is 1, and no span has `synthetic_recovery_root: true`. Never select the first or latest marker match. If no trace qualifies yet, poll every 5 seconds and repeat the full enumeration for up to 2 minutes. Restart a scan if offsets shift and duplicate a trace ID; if a complete distinct scan cannot be obtained, offset 100 still returns a candidate, or zero or multiple traces qualify, report the ambiguity and leave verification incomplete.
+
+Once exactly one trace qualifies, poll that exact `trace_id` every 5 seconds for up to 2 minutes while `status` is `processing` or `finalization_status` is `pending`. If it does not reach `finalized` within that bound, leave verification incomplete. Treat a null or unrecognized `finalization_status` as a hosted-contract blocker. After `finalization_status` is `finalized`, require `trace_context_contract_version: 2`, `verification_ready: true`, `span_payload_complete: true`, `span_tree_complete: true`, and `root_span_count: 1`; otherwise report a hosted-contract or incomplete-payload blocker. Page all spans again and perform two identical full marker-candidate enumerations at least 10 seconds apart to confirm that exactly one trace contains the nonce in both scans. Verify that all `span_count` spans were inspected.
+
+If `get_trace_context` rejects `verification_marker`, `candidate_offset`, `trace_id`, or `offset`, or omits `trace_context_contract_version`, `verification_ready`, `span_payload_complete`, `span_tree_complete`, `root_span_count`, `trace_id`, `name`, `workflow`, `created_at`, `spans[].parent_span_id`, `spans[].input_value`, `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat, and leave verification incomplete.
+
+- Print concise user-visible progress before and after install, edits, dependency/import checks, server restart, runtime verification, and platform confirmation. Never print secrets.
+- Run the project's existing tests plus its build/package/type checks after editing. Restart the long-running process so startup instrumentation is actually loaded.
+- Exercise the actual user-facing instrumented path. Inspect the full persisted span tree and returned semantic fields, not only a trace-list summary or local debug output. Confirm the nonce-qualified project trace is the fresh run, with one canonical span per operation and no duplicate LLM/tool/agent spans. An offline/no-export verifier is insufficient by itself.
+- Do not claim completion until all applicable checks pass. If runtime or ingestion cannot be confirmed, report the exact blocker and leave the result incomplete.
 
 ## Reference
 

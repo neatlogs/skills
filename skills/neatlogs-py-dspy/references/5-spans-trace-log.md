@@ -13,11 +13,10 @@ import neatlogs
 def main():
     pipeline = QAPipeline()
     neatlogs.wrap(pipeline)
-    with neatlogs.trace("qa_session"):
-        for q in questions:
-            neatlogs.log("answering: {q}", q=q)
-            result = pipeline(question=q)        # dspy CHAIN/LLM spans nest under WORKFLOW
-            neatlogs.log("done", )
+    for q in questions:
+        neatlogs.log("answering: {q}", q=q)
+        result = pipeline(question=q)        # dspy CHAIN/LLM spans nest under WORKFLOW
+        neatlogs.log("done")
 ```
 
 Hierarchy: `WORKFLOW(qa_session) > CHAIN(dspy module) > LLM`.
@@ -38,5 +37,6 @@ If the function is a one-line pass-through to `pipeline(...)`, don't decorate it
 
 - `@neatlogs.span(kind="WORKFLOW")` — the user-facing entry point.
 - `@neatlogs.span(kind="CHAIN")` — YOUR functions that chain several real steps, not a single module call.
-- `neatlogs.trace("name")` — group operations / prompt templates.
+- `@neatlogs.span(kind="EVALUATOR"|"MEMORY")` — an ordinary application-owned evaluator or memory function; evaluator function input/output and errors are captured automatically.
+- `neatlogs.trace("name", kind=...)` — the sole span for the only kinds `@span` rejects (`LLM`, `RERANKER`, and `VECTOR_STORE`), or for a raw/custom operation with no decorator boundary or direct canonical metadata needs (for example, a DeepEval callback); never a second layer for the same operation.
 - `neatlogs.log("msg {k}", k=v)` — steps inside a span.

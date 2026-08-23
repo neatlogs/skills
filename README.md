@@ -8,10 +8,21 @@ These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.)
 
 | Skill | Stack | Description |
 |-------|-------|-------------|
-| [`neatlogs-py`](./skills/neatlogs-py/) | Python | Instrument Python LLM apps with `neatlogs` — decorators, spans, prompt templates, framework integrations |
-| [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — span wrappers, auto-instrumentation, prompt templates |
-| [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — OpenTelemetry-based tracing for Gemini (`WrapGenAI`), Google ADK, and custom code; sessions & end-users via `Identify` |
+| [`neatlogs-py`](./skills/neatlogs-py/) | Python | Instrument Python LLM apps with `neatlogs` — wrappers, decorators, spans, and framework integrations |
+| [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — wrappers, handlers, hooks, processors, and custom spans |
+| [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — Gemini via `WrapGenAI`, direct/unsupported providers via explicit helpers, custom boundaries, and per-request identity |
 | [`neatlogs-ingest`](./skills/neatlogs-ingest/) | Any other language | Send nested JSON to HTTP ingest (`POST /v1/trace`) or configure OTLP/gRPC when OpenTelemetry already exists |
+
+## Trace Codex sessions with `@neatlogs/codex`
+
+These Agent Skills teach coding agents to instrument the application you are building. They do not trace the coding agent itself. To capture Codex coding sessions, install [`@neatlogs/codex`](https://github.com/neatlogs/neatlogs-codex), which registers Codex lifecycle hooks and exports those session traces to Neatlogs:
+
+```bash
+npm install -g @neatlogs/codex
+neatlogs-codex setup --global --api-key YOUR_PROJECT_KEY
+neatlogs-codex status --global
+neatlogs-codex doctor --global
+```
 
 ## Installation
 
@@ -94,7 +105,7 @@ Open your agent and ask any NeatLogs question:
 
 > *"What's the difference between `@span` and `trace()` in neatlogs?"*
 
-If the skill activated, the answer will reference NeatLogs-specific patterns — the `@span(kind="...")` decorator with kinds like `WORKFLOW`, `AGENT`, `TOOL`, prompt template tracking via `trace()`, and so on. If the answer is generic, the skill didn't load — restart your agent or check the install path above.
+If the skill activated, the answer will reference NeatLogs-specific patterns — supported wrappers/handlers/hooks/processors as the sole capture owner, plus `@span(kind="...")` for custom orchestration. If the answer is generic, the skill didn't load — restart your agent or check the install path above.
 
 ## Updating
 
@@ -120,7 +131,7 @@ Once installed, your coding agent automatically activates the skill when you ask
 
 > *"Add neatlogs tracing to my OpenAI calls"*
 > *"Instrument my CrewAI agents with neatlogs"*
-> *"Why aren't my prompt templates showing up in the trace?"*
+> *"Why is my wrapped LLM call producing duplicate spans?"*
 
 The agent reads the skill documentation and follows correct integration patterns from the reference files inside the skill.
 

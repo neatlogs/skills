@@ -42,6 +42,13 @@ resp, err := gc.GenerateContent(ctx, "gemini-2.5-flash",
 )
 ```
 
+`WrapGenAI` is the capture owner for these calls. Do not add `Trace`,
+`StartSpan(..., "llm")`, or `StartLLMSpan` around a call made through `gc`; doing
+so creates a duplicate LLM span. Add a custom `workflow`, `chain`, or `agent`
+parent only when the application function itself owns a real request, agent
+loop, or multi-step pipeline; keep the wrapped model call as its single LLM
+child.
+
 `GenerateContent`, `GenerateContentStream`, `EmbedContent`, and `CountTokens` are
 traced; any other method is reachable via `gc.Raw()`.
 
@@ -70,6 +77,7 @@ ctx, llm := neatlogs.StartLLMSpan(ctx, neatlogs.LLMCallOptions{
 defer llm.End()
 
 // ... make the real provider call ...
+// On failure: llm.SetError(err), then return.
 llm.SetOutputMessage("assistant", out)
 llm.SetUsage(promptTok, completionTok, totalTok)
 llm.SetFinishReason("stop")
@@ -92,6 +100,10 @@ calls the agent makes with `StartLLMSpan`, and boundaries with `StartSpan` /
 
 - Gemini: calls go through `gc` (the wrapped client), not the raw `client`, and
   `WrapGenAI` is imported from `contrib/genai` (aliased `nlgenai`).
+- Gemini: there is no `Trace`, `StartSpan(..., "llm")`, or `StartLLMSpan`
+  bracketing a call through `gc`; `WrapGenAI` produces the one canonical LLM
+  span.
 - Direct providers: every model call is bracketed by `StartLLMSpan` … `llm.End()`
-  with output + usage set.
+  with output + usage set (or `SetError` on failure), but only when no supported
+  wrapper owns that call.
 - No `contrib/adk` import anywhere.

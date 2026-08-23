@@ -49,4 +49,6 @@ const nextConfig = { serverExternalPackages: ["neatlogs"] };          // Next 15
 ## Verify
 - [ ] `instrumentation.ts` calls `init()` inside `register()` under the `NEXT_RUNTIME === "nodejs"` guard, importing `neatlogs` via DYNAMIC `await import("neatlogs")` (NOT top-level). ← the key requirement
 - [ ] NO `instrumentations` key in that `init()` — it throws. Route handlers wrap their own clients instead (`const client = wrapOpenAI(new OpenAI())`).
-- [ ] Server boots without `Can't resolve 'crypto'`; hitting a route produces spans. (If a route still errors, add `serverExternalPackages` per Step 2.)
+- [ ] Run the repository's package-manager build command after editing (`npm run build`, `pnpm build`, `yarn build`, or the existing equivalent) and fix every instrumentation-related build/type error.
+- [ ] Stop the old Next.js process and start a fresh development or production server. Adding `instrumentation.ts` to an already-running process is not verified by hot reload; production requires rebuild/redeploy.
+- [ ] Exercise the actual instrumented route or Server Action and confirm a new trace reaches the target Neatlogs project. Merely loading an unrelated page is not a test. (If the route still errors with `Can't resolve 'crypto'`, add `serverExternalPackages` per Step 2.)

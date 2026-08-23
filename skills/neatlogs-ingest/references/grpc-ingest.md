@@ -29,6 +29,6 @@ OpenTelemetry GenAI retrieval attributes are normalized as follows:
 |---|---|
 | `gen_ai.retrieval.query.text` | `neatlogs.retriever.query` |
 | `gen_ai.retrieval.top_k` | `neatlogs.retriever.top_k` |
-| `gen_ai.retrieval.documents` | `neatlogs.retriever.documents.0`, `.1`, … |
+| `gen_ai.retrieval.documents` | `neatlogs.retriever.documents` |
 
 `POST /v1/traces` is the separate OTLP/HTTP protobuf endpoint. It is not the nested-JSON HTTP ingest API.

@@ -8,7 +8,7 @@ Ask for EVERY function: **"Is this directly triggered by the user (CLI command, 
 
 - User-triggered → `@neatlogs.span(kind="WORKFLOW")` — this is the TRACE ROOT
 - Internal orchestrator (calls other functions, no LLM call itself) → `@neatlogs.span(kind="CHAIN")`
-- Contains a direct LLM API call → `@neatlogs.span(kind="CHAIN")` (+ trace() wrapper in Step 6)
+- Contains meaningful multi-step orchestration around one or more captured calls → `@neatlogs.span(kind="CHAIN")`. A function that only forwards one wrapped provider call needs no decorator.
 - Discrete I/O or tool capability → `@neatlogs.span(kind="TOOL")` (Step 7)
 - Pure utility (<3 lines, formatting, config) → no decorator
 
@@ -58,7 +58,7 @@ process() [WORKFLOW span — trace root]
 1. **User-facing entry point?** (click command, FastAPI route, celery task, `main()`)
    → `@neatlogs.span(kind="WORKFLOW")`
 2. **Contains a direct LLM API call?** (`client.chat.completions.create`, `client.messages.create`, etc.)
-   → `@neatlogs.span(kind="CHAIN")` (+ trace() wrapper, Step 6)
+   → `@neatlogs.span(kind="CHAIN")` only when the function performs real multi-step orchestration; never add an LLM trace around an already captured provider call.
    Exception: skip if the function ONLY does `return client.chat.completions.create(...)` with zero other logic — the call on the wrapped client is already traced.
 3. **Orchestrates multiple child functions, no LLM call?**
    → `@neatlogs.span(kind="CHAIN")`

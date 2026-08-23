@@ -126,7 +126,7 @@ const retrieveDocs = span({ kind: 'RETRIEVER' }, async (query: string) => {
 The RETRIEVER postprocessor automatically:
 - Extracts the query from function args named `query`, `question`, or `text`
 - Extracts documents from array results or objects with `documents`/`docs`/`results` keys
-- Sets `retrieval.documents.N.document.*` attributes (up to 20 docs)
+- Sets canonical `neatlogs.retriever.documents.N.{content,id,score,metadata}` attributes for every returned document; do not truncate results client-side
 
 #### EMBEDDING
 
@@ -252,7 +252,9 @@ class ResearchAgent {
 
 ## 3. `trace()` Callback Wrapper
 
-For prompt template tracking AND custom span attributes.
+For unsupported/custom operations that need direct canonical span attributes.
+Do not use `trace()` as a second LLM capture layer around a call
+owned by a wrapper, handler, hook, processor, or instrumentor.
 
 ### Signature
 
@@ -272,17 +274,12 @@ const result = await trace(options: TraceOptions, async (span) => {
 interface TraceOptions {
   name: string;                  // Required: span name
   kind?: SpanKind;               // Span kind (default: 'CHAIN')
-  promptTemplate?: string | PromptTemplate;   // System prompt template
-  promptVariables?: Record<string, any>;      // System prompt variables
-  userPromptTemplate?: string | UserPromptTemplate;  // User prompt template
-  userPromptVariables?: Record<string, any>;  // User prompt variables
-  version?: string;              // Prompt version identifier
   mask?: MaskFunction;           // Per-trace mask function
   attributes?: Record<string, any>;  // Custom span attributes
 }
 ```
 
-**IMPORTANT**: Unlike `span()`, `trace()` does NOT validate the kind string. It accepts any value including `'LLM'`, `'RERANKER'`, `'VECTOR_STORE'`, etc.
+**IMPORTANT**: Unlike `span()`, `trace()` does NOT validate the kind string at runtime. It accepts extended values including `'LLM'`, `'RERANKER'`, and `'VECTOR_STORE'`, although the current `TraceOptions.kind` type is narrower; use `kind: 'LLM' as any` (or the corresponding extended kind) at that boundary. Use `'LLM'` only when this manual trace is the sole capture owner for an unsupported/raw call.
 
 When `kind` is not provided, it defaults to `'CHAIN'`.
 
@@ -327,8 +324,8 @@ await trace({ name: 'my_op', kind: 'CHAIN' }, async (span) => {
 
 ### Use Cases for `trace()`
 
-1. **Prompt template tracking** — pass `promptTemplate` / `userPromptTemplate` to capture template + variables on LLM spans
-2. **Custom attribute capture** — use `span.setAttribute()` inside the callback
+1. **Custom attribute capture** — use `span.setAttribute()` inside the callback
+2. **Unsupported/raw operations** — create a manual span only when no wrapper, callback, hook, processor, native telemetry, or provider instrumentor owns it
 3. **Span kinds not available in `span()`**: `'LLM'`, `'RERANKER'`, `'VECTOR_STORE'`
 
 ### Common Anti-Pattern
@@ -376,49 +373,27 @@ log('Retrieved {count} documents', { count: 5 });
 
 ---
 
-## 5. Combining `span()` and `trace()` — Prompt Template Pattern
+## 5. Combine orchestration with automatically captured calls
 
-The most common pattern: use `span()` for orchestration and `trace()` inside for prompt tracking.
-
-```typescript
-import { init, wrapOpenAI, span, trace, flush, shutdown, PromptTemplate, UserPromptTemplate } from 'neatlogs';
-import { OpenAI } from 'openai';
-
-await init({
-  apiKey: '...',
-  workflowName: 'research',
-});
-
-const client = wrapOpenAI(new OpenAI());
-
-const sysTpl = new PromptTemplate('You are a {{role}} assistant. Always be thorough.');
-const userTpl = new UserPromptTemplate('Research: {{query}}');
-
-const researcherAgent = span(
-  { kind: 'AGENT', name: 'researcher' },
-  async (query: string) => {
-    return await trace(
-      { name: 'research_llm', kind: 'LLM', promptTemplate: sysTpl, userPromptTemplate: userTpl },
-      async () => {
-        const sysMsg = sysTpl.compile({ role: 'research' }) as string;
-        const userMsg = userTpl.compile({ query }) as string;
-        const response = await client.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: sysMsg },
-            { role: 'user', content: userMsg },
-          ],
-        });
-        return response.choices[0].message.content;
-      },
-    );
-  },
-);
-```
-
----
+Use `span()` to represent real custom orchestration. Call handler-owned operations directly inside it; do not add an LLM `trace()` around them. Use a manual LLM trace only for an unsupported/raw call outside LangChain.
 
 ## 6. Custom Span Attributes via `trace()`
+
+Manual non-root kinds must run below a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. The LangChain handler self-roots, but `trace({ kind: 'LLM'|'RERANKER'|'VECTOR_STORE'|... })` does not.
+
+Manual spans must use these exact canonical keys:
+
+| Kind | Exact canonical attributes |
+|---|---|
+| `LLM` | Required when available: `neatlogs.llm.provider`, `neatlogs.llm.model_name`, `neatlogs.llm.input_messages.{i}.role`, `neatlogs.llm.input_messages.{i}.content`, `neatlogs.llm.output_messages.{i}.role`, `neatlogs.llm.output_messages.{i}.content`, `neatlogs.llm.token_count.prompt`, `neatlogs.llm.token_count.completion`, `neatlogs.llm.token_count.total`. Also report `neatlogs.llm.system`, `neatlogs.llm.finish_reason` or `neatlogs.llm.stop_reason`, `neatlogs.llm.is_streaming`, `neatlogs.llm.temperature`, `neatlogs.llm.top_p`, `neatlogs.llm.top_k`, `neatlogs.llm.max_tokens`, and `neatlogs.llm.invocation_parameters` when known. |
+| `RETRIEVER` | `neatlogs.retriever.query`, `neatlogs.retriever.top_k`, `neatlogs.retriever.documents.{i}`, `neatlogs.retriever.input`, `neatlogs.retriever.output` |
+| `RERANKER` | `neatlogs.reranker.model_name`, `neatlogs.reranker.query`, `neatlogs.reranker.top_k`, `neatlogs.reranker.input_documents.{i}`, `neatlogs.reranker.output_documents.{i}`, `neatlogs.reranker.input`, `neatlogs.reranker.output` |
+| `VECTOR_STORE` | `neatlogs.db.system`, `neatlogs.db.operation`, `neatlogs.db.collection_name`, `neatlogs.vectordb.index_name`, `neatlogs.vectordb.embedding_model`, `neatlogs.vectordb.vector_dimension`, `neatlogs.vectordb.similarity_algorithm`, `neatlogs.vector_store.input`, `neatlogs.vector_store.output` |
+| `EMBEDDING` | `neatlogs.embedding.model_name`, `neatlogs.embedding.text`, `neatlogs.embedding.token_count`, `neatlogs.embedding.vector`, `neatlogs.embedding.invocation_parameters`, `neatlogs.embedding.input`, `neatlogs.embedding.output` |
+| `GUARDRAIL` | `neatlogs.guardrail.input`, `neatlogs.guardrail.output`, `neatlogs.guardrail.passed`, `neatlogs.guardrail.score` |
+| `EVALUATOR` | `neatlogs.evaluator.input`, `neatlogs.evaluator.output`; encode evaluator name, criteria, and score in JSON `neatlogs.metadata` until dedicated evaluator fields exist |
+
+Use indexed document keys. Do not emit the legacy `neatlogs.retrieval.*` namespace or invented keys such as `neatlogs.vector_store.query`.
 
 ### RERANKER
 
@@ -426,13 +401,17 @@ const researcherAgent = span(
 import { trace } from 'neatlogs';
 
 async function rerank(query: string, docs: string[], topN = 3) {
-  return await trace({ name: 'rerank', kind: 'RERANKER' }, async (span) => {
+  return await trace({ name: 'rerank', kind: 'RERANKER' as any }, async (span) => {
     span.setAttribute('neatlogs.reranker.query', query);
     span.setAttribute('neatlogs.reranker.top_k', topN);
     span.setAttribute('neatlogs.reranker.model_name', 'cohere-rerank-v3');
-    span.setAttribute('neatlogs.reranker.input_documents', JSON.stringify(docs));
+    docs.forEach((doc, i) =>
+      span.setAttribute(`neatlogs.reranker.input_documents.${i}`, JSON.stringify(doc)),
+    );
     const reranked = await rerankerModel.rerank(query, docs, topN);
-    span.setAttribute('neatlogs.reranker.output_documents', JSON.stringify(reranked));
+    reranked.forEach((doc, i) =>
+      span.setAttribute(`neatlogs.reranker.output_documents.${i}`, JSON.stringify(doc)),
+    );
     return reranked;
   });
 }
@@ -443,16 +422,20 @@ async function rerank(query: string, docs: string[], topN = 3) {
 ```typescript
 import { trace } from 'neatlogs';
 
-async function vectorSearch(query: string, topK = 10) {
-  return await trace({ name: 'vector_search', kind: 'VECTOR_STORE' }, async (span) => {
-    span.setAttribute('neatlogs.vector_store.query', query);
-    span.setAttribute('neatlogs.vector_store.top_k', topK);
-    const results = await vectorDb.search(query, topK);
-    span.setAttribute('neatlogs.vector_store.result_count', results.length);
-    return results;
+async function upsertDocuments(indexName: string, docs: Document[]) {
+  return await trace({ name: 'upsert_documents', kind: 'VECTOR_STORE' as any }, async (span) => {
+    span.setAttribute('neatlogs.db.system', 'custom_vector_db');
+    span.setAttribute('neatlogs.db.operation', 'upsert');
+    span.setAttribute('neatlogs.vectordb.index_name', indexName);
+    span.setAttribute('neatlogs.vector_store.input', JSON.stringify(docs));
+    const result = await vectorDb.upsert(indexName, docs);
+    span.setAttribute('neatlogs.vector_store.output', JSON.stringify(result));
+    return result;
   });
 }
 ```
+
+Use `RETRIEVER` for vector search/query. `VECTOR_STORE` is for writes and index-management operations.
 
 ### Manual LLM Span (No SDK to Patch)
 
@@ -462,24 +445,32 @@ When calling an LLM API directly without an instrumented SDK:
 import { trace } from 'neatlogs';
 
 async function rawLlmCall(prompt: string) {
-  return await trace({ name: 'raw_api_llm_call', kind: 'LLM' }, async (span) => {
-    span.setAttribute('neatlogs.internal', false);  // Required for dashboard visibility
-    span.setAttribute('llm.model_name', 'gpt-4o');
-    span.setAttribute('llm.input_messages', JSON.stringify([{ role: 'user', content: prompt }]));
+  return await trace({ name: 'raw_api_request', kind: 'WORKFLOW' }, async () =>
+    trace({ name: 'raw_api_llm_call', kind: 'LLM' as any }, async (span) => {
+    span.setAttribute('neatlogs.internal', false);
+    span.setAttribute('neatlogs.llm.provider', 'openai');
+    span.setAttribute('neatlogs.llm.model_name', 'gpt-4o');
+    span.setAttribute('neatlogs.llm.input_messages.0.role', 'user');
+    span.setAttribute('neatlogs.llm.input_messages.0.content', prompt);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] }),
     });
+    if (!response.ok) throw new Error('LLM request failed: ' + response.status);
     const data = await response.json();
 
-    span.setAttribute('llm.output_messages', JSON.stringify(data.choices));
-    span.setAttribute('llm.token_count.prompt', data.usage.prompt_tokens);
-    span.setAttribute('llm.token_count.completion', data.usage.completion_tokens);
+    span.setAttribute('neatlogs.llm.output_messages.0.role', 'assistant');
+    span.setAttribute('neatlogs.llm.output_messages.0.content', data.choices?.[0]?.message?.content ?? '');
+    span.setAttribute('neatlogs.llm.token_count.prompt', data.usage.prompt_tokens);
+    span.setAttribute('neatlogs.llm.token_count.completion', data.usage.completion_tokens);
+    span.setAttribute('neatlogs.llm.token_count.total', data.usage.total_tokens);
+    span.setAttribute('neatlogs.llm.finish_reason', data.choices?.[0]?.finish_reason ?? '');
     return data;
-  });
+    }),
+  );
 }
 ```
 
-> **Important**: Set `neatlogs.internal` to `false` on manual LLM spans when there's no auto-instrumented sibling. Otherwise the backend drops the span.
+> **Important**: `neatlogs.internal = false` makes the unsupported manual LLM span user-visible, but it does not make an LLM root eligible for finalization. Keep the explicit orchestration root unless one is already active. Never use this manual span for a LangChain-owned call.

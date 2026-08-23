@@ -39,12 +39,13 @@ def web_search(query: str) -> str:
     return _do_search(query)
 ```
 
-## The ONE case for a manual `trace()`: retrieval/embedding tools
+## Distinct unsupported/custom operations inside a tool
 
-Retrieval / embedding / vector-lookup tools should get a `with neatlogs.trace(kind="RETRIEVER")`
-inside the body — NOT because the tool would otherwise be untraced (wrap() traces
-it as a TOOL), but to upgrade it to a RETRIEVER span carrying the rich
-`neatlogs.retriever.*` attributes (query + documents) the dashboard renders.
+A tool may perform a distinct semantic operation that the CrewAI wrapper cannot
+see. Add one child span for that operation only: `RETRIEVER` for custom search
+or context lookup, and `EMBEDDING` for a custom/local embedder. The outer TOOL
+span remains wrapper-owned; the child is not an upgrade or a duplicate tool
+record.
 
 ```python
 @tool("kb_search")
@@ -54,12 +55,17 @@ def kb_search_tool(query: str) -> str:
         span.set_attribute("neatlogs.retriever.query", query)
         span.set_attribute("neatlogs.retriever.top_k", 3)
         results = KB.search(query, top_k=3)
-        span.set_attribute("neatlogs.retriever.documents", json.dumps(results))
+        for i, result in enumerate(results):
+            span.set_attribute(f"neatlogs.retriever.documents.{i}", json.dumps(result))
+        span.set_attribute("neatlogs.retriever.output", json.dumps(results))
         return KB.format_results(results)
 ```
 
-This is the pattern from the official `neatlogs_support_bot` example. Do it for
-retrieval tools on every crewai version.
+For a custom embedder, use `kind="EMBEDDING"` and the canonical
+`neatlogs.embedding.model_name`, `neatlogs.embedding.text`,
+`neatlogs.embedding.token_count`, and `neatlogs.embedding.output` attributes.
+Do not add either child when another supported integration already captures the
+same search or embedding call.
 
 ## Agents and Tasks — never decorate (all versions)
 
@@ -74,11 +80,9 @@ def create_researcher() -> Agent:
     return Agent(role="Researcher", goal="...", backstory="...")
 ```
 
-`neatlogs.bind_templates(...)` and `neatlogs.register_crewai_task(...)` (Step 6) are fine — they attach prompt context, they are not spans.
-
 ## Verification
 
 - [ ] Plain action tools (`@tool` functions and `BaseTool` subclasses) are LEFT AS-IS — no `@neatlogs.span` decorator and no manual `trace()` inside (wrap() auto-traces them; a manual span would duplicate).
-- [ ] Retrieval/embedding tools have `with neatlogs.trace(kind="RETRIEVER")` + `neatlogs.retriever.*` INSIDE the body (enrichment, not coverage).
+- [ ] A custom search inside a tool has one `RETRIEVER` child with indexed canonical document attributes; a custom embedder has one `EMBEDDING` child. Supported/captured operations have no extra manual span.
 - [ ] NO Agent factory or Task has `@neatlogs.span()`.
 - [ ] The crew was passed through `neatlogs.wrap(...)`; any `@neatlogs.span(kind="WORKFLOW")` is on your entry point (the `crew.kickoff()` caller).

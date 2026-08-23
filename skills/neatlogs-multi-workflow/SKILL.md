@@ -17,7 +17,23 @@ Most real services do more than one thing: a chat copilot, a summarizer, a repor
 
 This skill is **language-agnostic**. Apply it alongside the language skill (`neatlogs-py`, `neatlogs-ts`, `neatlogs-go`) — those cover `init()` and span APIs; this covers how to split one codebase into N workflows.
 
+For managed Neatlogs, do not add an endpoint/base URL option or `NEATLOGS_ENDPOINT`; every SDK defaults to `https://ingest.neatlogs.com`.
+
 Canonical docs: https://docs.neatlogs.com/sdk/multiple-workflows
+
+## Completion gate
+
+Do not report success after editing files alone. Build the affected package or application, restart the real process, and exercise every changed workflow entry point. This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
+
+Generate one process-marker UUID for each launched process and a distinct exercise-nonce UUID for every changed workflow entry point. Append `neatlogs.verification.marker=<marker UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries and scoping it only to the launched process; do not edit source or persistent configuration, and do not treat either value as a secret. Put each exact token `neatlogs-verification:<nonce UUID>` in a safe representative user request, prompt, or API argument for its workflow so it should be captured in a persisted span `input_value`. Record the current UTC timestamp before the exercises. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with the temporary marker and which nonce token to submit for each workflow. If any path cannot safely carry a unique captured input, report that blocker and leave its verification incomplete.
+
+After the exercises finish, flush telemetry and gracefully stop the marked process or relaunch it without the marker before discovery. If marked trace production cannot be quiesced, leave verification incomplete. Call the already-connected Neatlogs platform MCP with `get_trace_context(verification_marker=<marker UUID>, candidate_offset=0)`. Enumerate offsets from 0 upward, collecting distinct trace IDs until MCP returns `No project trace found` for the next offset. Page every candidate completely with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null. Match a candidate to a workflow only when exactly that workflow's nonce appears in a persisted span `input_value`, its top-level `name` and `workflow` plus parentless root span match the exercised entry point, its `created_at` is not earlier than the recorded timestamp, `root_span_count` is 1, and no span has `synthetic_recovery_root: true`. Never select the first or latest marker match. If no workflow trace qualifies yet, poll every 5 seconds and repeat the full enumeration for up to 2 minutes. Restart a scan if offsets shift and duplicate a trace ID; if a complete distinct scan cannot be obtained, offset 100 still returns a candidate, any nonce matches zero or multiple traces, or one trace matches multiple workflow nonces, report the ambiguity and leave verification incomplete.
+
+For each uniquely matched trace, poll its exact `trace_id` every 5 seconds for up to 2 minutes while `status` is `processing` or `finalization_status` is `pending`. If any trace does not reach `finalized` within that bound, leave verification incomplete. Treat a null or unrecognized `finalization_status` as a hosted-contract blocker. After all are `finalized`, require `trace_context_contract_version: 2`, `verification_ready: true`, `span_payload_complete: true`, `span_tree_complete: true`, and `root_span_count: 1` on each trace; otherwise report a hosted-contract or incomplete-payload blocker. Page every span again and perform two identical full marker-candidate enumerations at least 10 seconds apart to confirm the same one-to-one nonce/trace mapping in both scans. Verify that all `span_count` spans in every matched trace were inspected.
+
+If `get_trace_context` rejects `verification_marker`, `candidate_offset`, `trace_id`, or `offset`, or omits `trace_context_contract_version`, `verification_ready`, `span_payload_complete`, `span_tree_complete`, `root_span_count`, `trace_id`, `name`, `workflow`, `created_at`, `spans[].parent_span_id`, `spans[].input_value`, `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat.
+
+Inspect each full persisted span tree, top-level `workflow`, and parentless root span, not only a trace-list summary or local debug output. Confirm every fresh trace is assigned to the intended workflow. If any workflow cannot be built, restarted, run, or verified, state that the instrumentation is incomplete and identify the exact blocker.
 
 ---
 
@@ -43,9 +59,9 @@ A large service uses both:
 | Dimension | What it is | Set by |
 |---|---|---|
 | **Root span name** | The **title** of an individual trace | The `name` passed when opening the root |
-| **Workflow** | The **group** a trace belongs to (dashboard Workflow column / filter / analytics) | The `neatlogs.workflow_name` label — process default from `init()`, or a per-root override |
+| **Workflow** | The **group** a trace belongs to (dashboard Workflow column / filter / analytics) | Process default from `init(workflow_name=...)` / `init({ workflowName })`; canonical per-root override `neatlogs.workflow.name` |
 
-> ⚠️ **Naming the root span is NOT enough to make a distinct workflow.** The span name is the trace title; the Workflow dimension is driven by the `neatlogs.workflow_name` label. If a feature only opens a differently-*named* root but never overrides the label, it still rolls up under the single `init()` workflow. **Set the per-root override.** Convention: use the same human-readable string for both the root name and the workflow override so the trace title and Workflow column agree.
+> ⚠️ **Naming the root span is NOT enough to make a distinct workflow.** The span name is the trace title; the Workflow dimension uses the process default unless the root sets canonical `neatlogs.workflow.name`. If a feature only opens a differently-*named* root but never sets that attribute, it still rolls up under the single `init()` workflow. Convention: use the same human-readable string for both the root name and the workflow override so the trace title and Workflow column agree.
 
 ---
 
@@ -55,7 +71,7 @@ Open the root at the FIRST line of the feature's work, and set the label there.
 
 ### Python
 
-`neatlogs.workflow_name` isn't a valid Python keyword, so set it with `set_attribute` on the root span:
+Set the canonical per-root `neatlogs.workflow.name` attribute with `set_attribute`:
 
 ```python
 import neatlogs
@@ -65,7 +81,7 @@ neatlogs.init(api_key=..., workflow_name="my-service")  # process-wide default
 @app.post("/copilot/chat")
 async def copilot_chat(req):
     with neatlogs.trace("Copilot chat", kind="WORKFLOW") as root:
-        root.set_attribute("neatlogs.workflow_name", "Copilot chat")   # <- makes it its own workflow
+        root.set_attribute("neatlogs.workflow.name", "Copilot chat")
         return await run_copilot(req)
 ```
 
@@ -77,7 +93,7 @@ from contextlib import contextmanager
 @contextmanager
 def workflow(name: str):
     with neatlogs.trace(name, kind="WORKFLOW") as root:
-        root.set_attribute("neatlogs.workflow_name", name)
+        root.set_attribute("neatlogs.workflow.name", name)
         yield root
 
 with workflow("Report generation"):
@@ -133,6 +149,6 @@ Keep it **one workflow per feature area**, not per request and not per file. Use
 The NeatLogs AI service (one FastAPI process) is the canonical example:
 
 - **One `init(workflow_name="AI Service")`** as the coarse process fallback.
-- **Each feature opens its own `WORKFLOW` root at its handler and overrides the label** — Copilot chat, the trace summarizer, the form builder, suggestion generation — via a shared helper that calls `span.set_attribute("neatlogs.workflow_name", <label>)` on the root plus tenant/session attributes. The backend prefers this per-root value over the process default for the trace's Workflow column.
+- **Each feature opens its own `WORKFLOW` root at its handler and overrides the label** — adapt the names to the application's real features — via a shared helper that calls `span.set_attribute("neatlogs.workflow.name", <label>)` on the root plus tenant/session attributes. The backend prefers this per-root value over the process default for the trace's Workflow column.
 - **A separately-booted sub-app runs its own `init(workflow_name="Neatlogs Harness")`** — level 1 (separate boot path → separate workflow).
 - Features that only name the root but skip the override still roll up under `"AI Service"` — proof that the override, not the span name, carves out a distinct workflow.
