@@ -16,11 +16,13 @@ being right.
 | `TOOL` | A discrete capability: one input, one output, one job. The thing an agent CALLS. Use `tool_name=` and `description=`. |
 | `RETRIEVER` | RAG fetch: query in, documents out. |
 | `EMBEDDING` | Text → vector. |
-| `RERANKER` | Re-orders candidate docs by relevance. |
+| `RERANKER` | Re-orders candidate docs by relevance. **Not accepted by `@span()`** — create via `neatlogs.trace()`. |
 | `GUARDRAIL` | Validates / filters / scores content. |
+| `EVALUATOR` | A custom evaluator function that scores output quality (answer vs reference, criteria rubric, LLM-as-judge step). Accepted by `@span()`. |
+| `MEMORY` | Memory save / recall operations against a memory store. Accepted by `@span()`. |
 | `MCP_TOOL` | MCP protocol tool handlers. |
 | `LLM` | A model call. **Not accepted by `@span()`** — create via `neatlogs.trace(kind="LLM")` to attach prompt templates. |
-| `VECTOR_STORE` | A vector DB write/query. **Not accepted by `@span()`** — create via `neatlogs.trace()`. |
+| `VECTOR_STORE` | A vector DB write or index management; vector search is a RETRIEVER. **Not accepted by `@span()`** — create via `neatlogs.trace()`. |
 
 ## Migration table: LangSmith `@traceable(run_type=...)` → NeatLogs kind
 

@@ -24,7 +24,7 @@ without rewriting the business logic.
 
 | LangSmith (v0.x) | NeatLogs |
 |---|---|
-| `@traceable` on a function (no `run_type` arg) | `@neatlogs.span(kind="AGENT", name=...)` |
+| `@traceable` on a function (no `run_type` arg) | `@neatlogs.span(kind="CHAIN", name=...)` (the safe default for a sub-step; use AGENT only if the function is a reason → act tool-calling loop, TOOL if the agent calls it) |
 | `@traceable(run_type="llm")` on a chat call | `with neatlogs.trace("name", kind="LLM", system_prompt_template=..., user_prompt_template=...)` |
 | `@traceable(run_type="tool")` on a tool function | `@neatlogs.span(kind="TOOL", tool_name=..., description=...)` |
 | `@traceable(run_type="chain")` on a multi-step orchestrator | `@neatlogs.span(kind="CHAIN", name=...)` |
