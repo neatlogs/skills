@@ -4,13 +4,14 @@
 
 Do not run this step until:
 
-- The NeatLogs dashboard has been receiving traces for at least
-  one full request cycle (a single end-to-end test, ideally a
-  real production load sample). Step 4 and/or step 5 are
-  confirmed working.
-- The trace shape on NeatLogs matches what LangSmith was
-  showing: same spans, same nesting, same token counts, same
-  session grouping.
+- The SKILL.md live completion gate has passed on a
+  representative request: a marker-matched, nonce-qualified trace
+  was found through `get_trace_context`, fully paged, and every
+  persisted span inspected. Step 4 and/or step 5 are confirmed
+  working against persisted data, not a dashboard glance.
+- The persisted trace shape matches what LangSmith was showing:
+  same spans, same nesting, same token counts, same session
+  grouping.
 - A rollback plan is in place (see step 7).
 
 ## Action

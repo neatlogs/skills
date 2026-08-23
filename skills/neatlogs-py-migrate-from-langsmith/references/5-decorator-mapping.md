@@ -143,8 +143,9 @@ Before replacing, audit each call site for these:
   a manual edit (or a focused AST refactor if the user is up for
   it).
 - It is **not** auto-verified. Run the project after each file's
-  edits and check the NeatLogs dashboard to confirm spans are
-  still landing.
+  edits; final confirmation comes from the SKILL.md live
+  completion gate (a marker-matched, nonce-qualified persisted
+  trace), not from a dashboard glance.
 - It does **not** replicate LangSmith's eval / dataset / feedback
   surfaces. NeatLogs has no eval. If the project depends on
   `langchain smith` for CI evals, stay on LangSmith for that
@@ -178,9 +179,10 @@ def web_search(query: str) -> str:
 4. All `langsmith_client.flush()` / `delete_project(...)` calls
    are replaced or removed.
 5. The app still runs. Trigger a request; verify the same trace
-   shape appears in the NeatLogs dashboard that previously
-   appeared in LangSmith (one WORKFLOW root, nested AGENT/TOOL/
-   LLM children, session grouping if the project used sessions).
+   shape that previously appeared in LangSmith now lands in
+   NeatLogs (one WORKFLOW root, nested AGENT/TOOL/
+   LLM children, session grouping if the project used sessions),
+   confirmed through the SKILL.md live completion gate.
 6. No duplicate spans: the project should NOT have BOTH a
    LangSmith span AND a NeatLogs span for the same logical
    operation. (Step 6 removes the LangSmith side; until then,
