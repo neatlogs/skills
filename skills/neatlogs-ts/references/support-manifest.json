@@ -1,0 +1,18 @@
+{
+  "format_version": "neatlogs.skills-support/v1",
+  "skills_version": "1.2.4",
+  "telemetry_schema": 2,
+  "doctor_format": "neatlogs.doctor/v2",
+  "backend_trace_context": 2,
+  "runtime": { "name": "node", "minimum_version": "18.0.0" },
+  "sdk": {
+    "package": "neatlogs",
+    "minimum_version": "1.1.19",
+    "release_state": "pending"
+  },
+  "doctor": {
+    "local_command": "npx --no-install neatlogs doctor --local --json",
+    "probe_command": "npx --no-install neatlogs doctor --probe --json"
+  },
+  "unsupported_surfaces": ["instrumentations-init-option", "edge-runtime"]
+}
