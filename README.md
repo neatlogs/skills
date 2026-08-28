@@ -135,6 +135,20 @@ Once installed, your coding agent automatically activates the skill when you ask
 
 The agent reads the skill documentation and follows correct integration patterns from the reference files inside the skill.
 
+## Compatibility and verification contract
+
+Public Skills use [`contracts/skills-support-v1.json`](./contracts/skills-support-v1.json)
+as the tested compatibility authority for SDK, Doctor, Wizard, backend trace
+context, and integration support. A pending SDK release is reported as an upgrade
+blocker; installation, compilation, local spans, HTTP acceptance, or an
+uncorrelated trace are never treated as successful setup.
+
+Run the repository validation before packaging a Skill:
+
+```bash
+python3 scripts/validate_phase11.py
+```
+
 ## Requirements
 
 - A coding agent that supports the [Agent Skills](https://agentskills.io) standard — Claude Code, Cursor, Codex, Gemini CLI, Windsurf, OpenCode, Goose, etc.
