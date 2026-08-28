@@ -11,7 +11,7 @@ metadata:
 
 This project uses LangChain (`@langchain/*`) or LangGraph (`@langchain/langgraph`). Neatlogs instruments it with **`langchainHandler()`** — a LangChain callback handler you attach via `{ callbacks: [handler] }`. This is the **only** supported path.
 
-> **`init({ instrumentations: ['langchain'] })` throws.** The OpenInference LangChain instrumentor creates and activates spans on the **global** OpenTelemetry context, which Neatlogs' private provider cannot isolate from a co-tenant tracer (Datadog, etc.), so `init()` rejects the key outright with a message pointing at `langchainHandler()`. Older guidance offered it as a zero-touch alternative — that is gone.
+> **The legacy public instrumentations loader is unsupported.** The OpenInference LangChain instrumentor activates spans on the global OpenTelemetry context, so `init()` rejects it and points to `langchainHandler()`. Older zero-touch guidance is obsolete.
 
 ## Core mechanism — `langchainHandler()`
 
@@ -65,7 +65,7 @@ await app.invoke(state, { callbacks: [handler] });               // graph level 
 ## Rules (apply to ALL steps)
 
 - `await init(...)` runs once at startup. Import order does NOT matter — the handler binds to Neatlogs' private provider per call, so a static `import` of `@langchain/*` is fine (no dynamic `import()` needed).
-- NEVER pass `instrumentations: ['langchain']` to `init()` — it **throws**. The callback handler is the only path.
+- Never pass the legacy instrumentations option to `init()`; it throws. The callback handler is the only path.
 - Create ONE `langchainHandler()` and pass it via `{ callbacks: [handler] }`. For plain LangChain (LCEL chains / bare model calls) attach per model/chain call. For LangGraph attach at the graph invocation (`app.invoke(..., { callbacks: [handler] })`), NOT the per-node `llm.invoke()`.
 - The handler self-roots a parentless supported run. Add at most one app-owned `span({ kind:'WORKFLOW' })` only when the user-facing entry performs meaningful pre/post work or coordinates multiple runs.
 - NEVER wrap individual chains, graph nodes, LangChain tools, or `llm.invoke()` with `span()`/`trace()` — they are auto-traced by the handler; manual wrapping duplicates.
