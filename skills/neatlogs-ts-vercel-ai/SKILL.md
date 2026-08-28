@@ -11,11 +11,11 @@ metadata:
 
 This project uses the Vercel AI SDK (`ai` package: `generateText`, `streamText`, `generateObject`, `streamObject`, `embed`, `embedMany`, `rerank`). Neatlogs instruments it with **`wrapAISDK(ai)` from `neatlogs/ai`** — NOT via an `instrumentations` list. The wrapper opts the AI SDK's native OpenTelemetry support in per call.
 
-> **`init({ instrumentations: ['ai_sdk'] })` throws** — as does every other provider/framework key. The registry's `ai_sdk` instrumentor drives the **global** OpenTelemetry context, which Neatlogs' private provider cannot isolate from a co-tenant tracer (Datadog, etc.), so `init()` rejects the key with a message pointing at `wrapAISDK()`. Older guidance called it a harmless no-op — it is not.
+> **The legacy public instrumentations loader is unsupported.** The AI SDK instrumentor drives the global OpenTelemetry context, so `init()` rejects it and points to `wrapAISDK()`. Older no-op guidance is obsolete.
 
 ## Core mechanism (DIFFERENT from other skills)
 
-1. `await init({ ... })` first (sets up Neatlogs' private tracer — never registered globally). **Never pass `instrumentations: ['ai_sdk']` — `init()` throws for it; the wrapper does the work.**
+1. `await init({ ... })` first (sets up Neatlogs' private tracer — never registered globally). Never pass the legacy instrumentations option; the wrapper does the work.
 2. `const { generateText, streamText, ... } = wrapAISDK(ai)` — wrap the `ai` module.
 3. Use the WRAPPED functions exactly like the originals. Each wrapped call auto-creates a WORKFLOW/CHAIN parent span + native `ai.doGenerate`/`doStream` LLM children + tool-call TOOL children.
 
@@ -35,7 +35,7 @@ If the project is a **Next.js** app (it has `next.config.*` / `app/` route handl
 ## Rules (apply to ALL steps)
 
 - `await init(...)` runs first (registers the TracerProvider). Then `wrapAISDK(ai)`.
-- NEVER pass `instrumentations: ['ai_sdk']` (or any provider key) — `init()` **throws**. The wrapper is the instrumentation. A provider SDK called DIRECTLY outside the AI SDK needs its own helper (`wrapOpenAI`, `wrapAnthropic`, …).
+- Never pass the legacy instrumentations option (or any provider key); `init()` throws. The wrapper is the instrumentation. A provider SDK called directly outside the AI SDK needs its own helper (`wrapOpenAI`, `wrapAnthropic`, …).
 - Replace direct `ai` calls with the WRAPPED equivalents: destructure `generateText`/`streamText`/etc. from `wrapAISDK(ai)` and call those. Don't leave bare `import { generateText } from 'ai'` call sites — they won't be traced.
 - Do NOT also wrap wrapped calls in `span()`/`trace()` — the wrapper already opens the parent span. Add a `WORKFLOW` only when the application entry point owns a real multi-step request/job; keep each wrapped AI-SDK call as its canonical child.
 - The AI SDK supports both v3–v6; `wrapAISDK` is version-agnostic.
