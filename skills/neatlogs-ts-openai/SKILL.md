@@ -11,7 +11,7 @@ metadata:
 
 This project calls an LLM provider SDK directly (no agent framework). Neatlogs instruments supported providers with an **explicit `wrap*` helper applied to the client instance**. The wrapper is the sole owner of each provider LLM span. Add `span()` only around your own multi-step orchestration; use a manual `trace({ kind: 'LLM' })` only for an unsupported/raw LLM call that has no wrapper, handler, hook, processor, or instrumentor.
 
-> **`init({ instrumentations: [...] })` throws.** Every provider key is rejected — the underlying instrumentors drive the **global** OpenTelemetry context, which Neatlogs' private provider cannot isolate from a co-tenant tracer (Datadog, etc.). The thrown error names the helper to use instead. Older guidance offered the key as a zero-touch path — that is gone.
+> **The legacy public instrumentations loader is unsupported.** Every provider key is rejected because those instrumentors drive the global OpenTelemetry context. Use the explicit helper named by the error. Older zero-touch guidance is obsolete.
 
 ## Core mechanism
 
@@ -45,7 +45,7 @@ A provider with no helper (Cohere, Groq, Mistral, Ollama, Together, raw `fetch`)
 ## Rules (apply to ALL steps)
 
 - `await init(...)` runs once at startup. Import order does NOT matter — the helpers patch the client instance, so static imports of the LLM SDK are fine and no dynamic `import()` is needed.
-- NEVER pass `instrumentations: [...]` to `init()` — it **throws** for every provider key. Wrap the client instead.
+- Never pass the legacy instrumentations option to `init()`; it throws for every provider key. Wrap the client instead.
 - Every provider client the code constructs must be wrapped; an unwrapped client is silently untraced.
 - All lifecycle calls are async: `await init/flush/shutdown`.
 - The wrapper captures the provider LLM call (input/output, model, tokens, latency) and auto-opens a WORKFLOW root if the call would be parentless. It is the canonical LLM span.
