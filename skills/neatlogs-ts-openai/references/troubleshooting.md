@@ -6,25 +6,19 @@ Common mistakes, anti-patterns, and diagnostic steps for the NeatLogs TypeScript
 
 ## 1. `instrumentations: [...]` Throws (Most Common Mistake)
 
-| Wrong | Right |
-|-------|-------|
-| `await init({ instrumentations: ['openai'] })` | `await init({ ... })` then `wrapOpenAI(new OpenAI())` |
-
 `init()` **rejects** every provider/framework instrumentation key — the underlying OpenInference/OTel-contrib instrumentors drive the **global** OTel context, which Neatlogs' private provider cannot isolate. The thrown error names the replacement helper.
 
 ```typescript
-// ❌ WRONG — throws at init()
-//   The "openai" auto-instrumentation uses the global OpenTelemetry context and
-//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
-//   Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing.
-await init({ instrumentations: ['openai'] });
-
-// ✅ RIGHT — per-instance wrapper; import order is irrelevant
+// Supported: per-instance wrapper; import order is irrelevant
 import { OpenAI } from 'openai';
 import { init, wrapOpenAI } from 'neatlogs';
 await init({ apiKey: process.env.NEATLOGS_API_KEY });
 const client = wrapOpenAI(new OpenAI());
 ```
+
+Do not publish or generate a copyable `instrumentations` initialization snippet,
+even as a negative example. State the incompatibility in prose and show only the
+supported wrapper or hook.
 
 Because the helpers patch the **instance** you pass (not the module), there is **no import-order rule** in the TypeScript SDK and no need for dynamic `import()`. See the [Provider → helper table](../SKILL.md#provider--helper) for the helper for each library.
 
