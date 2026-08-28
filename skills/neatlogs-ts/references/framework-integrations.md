@@ -2,7 +2,7 @@
 
 Framework-specific integration patterns for the NeatLogs TypeScript SDK. Covers the wrapper for each supported LLM provider and agent framework, plus representative code examples.
 
-> **`init({ instrumentations: [...] })` THROWS for every provider/framework key.** Instrumentation is always an explicit helper applied to the object — see [Supported Instrumentations](../SKILL.md#supported-instrumentations). Because helpers patch the **instance**, not the module, import order never matters.
+> **The legacy public instrumentations loader throws for every provider/framework key.** Capture is always an explicit helper applied to the object — see [Supported Instrumentations](../SKILL.md#supported-instrumentations). Because helpers patch the instance, not the module, import order never matters.
 
 ---
 
@@ -181,7 +181,7 @@ await shutdown();
 
 ## 6. MCP (Model Context Protocol)
 
-- **No auto-instrumentor** — `instrumentations: ['mcp']` throws. Instrument MCP tools yourself with `span({ kind: 'MCP_TOOL' })`.
+- **No auto-instrumentor** — the legacy MCP instrumentation key throws. Instrument MCP tools yourself with `span({ kind: 'MCP_TOOL' })`.
 
 ```typescript
 import { init, span, flush, shutdown } from 'neatlogs';
@@ -232,7 +232,7 @@ await shutdown();
 
 ## 8. BeeAI
 
-- **No auto-instrumentor** — `instrumentations: ['beeai']` throws. Instrument your BeeAI agent/tool functions with `span()` (`kind: 'AGENT'` / `'TOOL'`), and the underlying provider client with its own wrapper.
+- **No auto-instrumentor** — the legacy BeeAI instrumentation key throws. Instrument your BeeAI agent/tool functions with `span()` (`kind: 'AGENT'` / `'TOOL'`), and the underlying provider client with its own wrapper.
 
 ```typescript
 import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';
@@ -351,7 +351,7 @@ The Vercel AI SDK emits its own `ai.*` namespace; the SDK's `UnifiedAttributePro
 | `ai.toolCall.name` / `args` / `result` | `tool.name` / `input.value` / `output.value` (on `ai.toolCall` spans) |
 | `ai.settings.{temperature,maxTokens,topP,…}` | `neatlogs.llm.{temperature,max_tokens,top_p,…}` |
 
-### Note on `init({ instrumentations: ['ai_sdk'] })`
+### Note on the legacy AI SDK instrumentation key
 
 `ai_sdk` exists in the instrumentation registry for scope-detection consistency, but passing it to `init()` **throws** (its registry entry names an instrumentor module, so the isolation gate rejects it). `wrapAISDK(ai)` is the only path.
 
