@@ -1,0 +1,53 @@
+{
+  "format_version": "neatlogs.skills-support/v1",
+  "skills_version": "1.2.4",
+  "contracts": {
+    "telemetry_schema": 2,
+    "doctor_format": "neatlogs.doctor/v2",
+    "backend_trace_context": 2,
+    "wizard_doctor": "neatlogs.doctor/v2"
+  },
+  "stacks": {
+    "typescript": {
+      "runtime": {
+        "name": "node",
+        "minimum_version": "18.0.0"
+      },
+      "sdk": {
+        "package": "neatlogs",
+        "minimum_version": "1.1.19",
+        "release_state": "pending",
+        "upgrade_command": "npm install neatlogs@latest"
+      },
+      "doctor": {
+        "local_command": "npx --no-install neatlogs doctor --local --json",
+        "probe_command": "npx --no-install neatlogs doctor --probe --json",
+        "local_is_read_only": true,
+        "probe_requires_backend": true
+      },
+      "integrations": [
+        { "id": "openai", "classification": "explicit-wrapper", "entrypoint": "wrapOpenAI" },
+        { "id": "anthropic", "classification": "explicit-wrapper", "entrypoint": "wrapAnthropic" },
+        { "id": "azure-openai", "classification": "explicit-wrapper", "entrypoint": "wrapAzureOpenAI" },
+        { "id": "google-genai", "classification": "explicit-wrapper", "entrypoint": "wrapGoogleGenAI" },
+        { "id": "vertex-ai", "classification": "explicit-wrapper", "entrypoint": "wrapVertexAI" },
+        { "id": "bedrock", "classification": "explicit-wrapper", "entrypoint": "wrapBedrock" },
+        { "id": "langchain", "classification": "explicit-hook", "entrypoint": "langchainHandler" },
+        { "id": "vercel-ai", "classification": "explicit-wrapper", "entrypoint": "wrapAISDK" },
+        { "id": "mastra", "classification": "explicit-wrapper", "entrypoint": "wrapMastra" },
+        { "id": "pi-agent", "classification": "explicit-hook", "entrypoint": "piAgentHooks" }
+      ],
+      "unsupported_surfaces": [
+        "instrumentations-init-option",
+        "edge-runtime"
+      ]
+    }
+  },
+  "success_requires": [
+    "doctor-local-compatible",
+    "approved-build-passed",
+    "approved-exercise-passed",
+    "correlated-probe-finalized",
+    "persisted-span-tree-complete"
+  ]
+}

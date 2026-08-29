@@ -28,17 +28,9 @@ Pick the helper for the detected provider (all re-exported from `neatlogs`, or i
 
 ## Do NOT pass instrumentations — it throws
 
-```typescript
-// ❌ WRONG — init() THROWS:
-//   The "openai" auto-instrumentation uses the global OpenTelemetry context and
-//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
-//   Use wrapOpenAI() from 'neatlogs/openai' for isolated tracing.
-await init({ instrumentations: ["openai"] });
-
-// ✅ RIGHT — wrap the instance.
-await init({ apiKey: process.env.NEATLOGS_API_KEY ?? "" });
-const client = wrapOpenAI(new OpenAI());
-```
+Do not add an `instrumentations` property to `init()`. It is unsupported and
+throws. Use the working wrapper example above; public Skill documentation must
+not emit a copyable unsupported initialization snippet, even as a negative example.
 
 Dynamic `await import("openai")` is also pointless here — it was only ever needed to beat a module-patching instrumentor, and there isn't one. Use a static import.
 

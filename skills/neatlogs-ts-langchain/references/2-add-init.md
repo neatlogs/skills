@@ -18,17 +18,10 @@ const llm = new ChatOpenAI({ model: "gpt-4o" });
 
 
 ## Do NOT pass instrumentations — it throws
-```typescript
-// ❌ WRONG — init() THROWS:
-//   The "langchain" auto-instrumentation uses the global OpenTelemetry context and
-//   cannot guarantee isolation from other tracing SDKs (Datadog, etc.).
-//   Use langchainHandler() from 'neatlogs/langchain' for isolated tracing.
-await init({ instrumentations: ["langchain"] });
 
-// ✅ RIGHT — handler only.
-await init({ apiKey: process.env.NEATLOGS_API_KEY ?? "" });
-const handler = langchainHandler();
-```
+Do not add an `instrumentations` property to `init()`. It is unsupported and
+throws. Use the working handler example above; public Skill documentation must
+not emit a copyable unsupported initialization snippet, even as a negative example.
 
 ## Verify
 1. `await init(...)` runs once at startup, before the first traced call.

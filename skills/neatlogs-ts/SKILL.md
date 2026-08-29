@@ -9,7 +9,7 @@ description: >
 
 # NeatLogs TypeScript SDK — Agent Skill
 
-NeatLogs auto-instruments LLM calls, agent frameworks, and custom code with these core exports:
+NeatLogs captures LLM calls through explicit wrappers, hooks, handlers, and custom spans with these core exports:
 `init()`, `flush()`, `shutdown()`, `span()`, `Span()`, `trace()`, `identify()`, and `log()`.
 
 ---
@@ -77,13 +77,16 @@ await shutdown();
 
 ## Instrumentation Workflow
 
-1. **Assess**: Detect what LLM providers/frameworks the project uses.
-2. **Instrument**: Choose the correct approach:
+Before changing a project, read and follow [Safe setup and verification](references/safe-setup-workflow.md). It defines the compatibility, Doctor, approval, rollback, idempotency, and correlated-probe gates. Read the machine-readable [support manifest](references/support-manifest.json) instead of inferring support from imports or old examples.
+
+1. **Assess**: Detect the runtime, package manager, installed SDK version, existing instrumentation, and LLM providers/frameworks without editing.
+2. **Diagnose**: Run the manifest's local Doctor command. Stop with upgrade instructions when the installed package does not expose the required Doctor contract.
+3. **Instrument**: Choose the correct approach:
    - Providers/frameworks → the matching `wrap*` helper / handler / processor (see [Supported Instrumentations](#supported-instrumentations))
    - `span()` wrappers for custom orchestration code
    - `trace()` for custom span attributes and unsupported/raw operations only—never around a call already owned by a wrapper, handler, hook, processor, or instrumentor
-3. **Init**: Add `await init()` once at startup, with **no** `instrumentations` key.
-4. **Verify**: build/typecheck the changed project, restart any server/startup process, exercise the real instrumented path, and confirm a new NeatLogs trace with one canonical span per operation.
+4. **Init**: Add `await init()` once at startup, with **no** `instrumentations` key.
+5. **Verify**: preview commands and diffs, obtain approval, build/typecheck, exercise the real path, run the correlated backend probe, and confirm a complete persisted trace. Run the Skill again and require no unnecessary edits.
 
 For a generic Next.js retrieval-and-generation example, see [Retrieval-and-generation workflow verification](references/retrieval-generation-workflow.md).
 
