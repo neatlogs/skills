@@ -91,7 +91,21 @@ Once a client is `wrap()`'d (or its provider is in `instrumentations=[]`), these
 
 You may add WORKFLOW/CHAIN/AGENT spans around genuine multi-step orchestration. Do NOT add `neatlogs.trace(kind="LLM")` around any wrapped or instrumented provider call; the automatic span is canonical.
 
-## Live completion gate (wizard or standalone coding agent)
+## Doctor gate
+
+Before editing, run this read-only preflight from the application root:
+
+```bash
+npx --yes @neatlogs/wizard@latest doctor --local --json --install-dir .
+```
+
+Require `doctor_version: 1` and `schema_version: 2`. Treat `application_exercised: false` and `capture_scope: "wizard_sdk_fixture"` literally: local doctor validates static target configuration plus the wizard's normalized in-memory SDK fixture; it is not proof that this application's runtime or the backend worked.
+
+Only remediate a failed check when `fixable: true`: `INSTRUMENTOR_NOT_ACTIVE` means install/initialize using this skill; `ATTRIBUTE_CONFLICT` means apply only the conflict named in the check; `MISSING_API_KEY` means configure the key through the user's secret/environment mechanism, never source or chat. Do not edit for any other code or for warnings such as `PROJECT_OWNERSHIP_AMBIGUOUS`; report the exact check instead.
+
+After the project checks/build and a real-path exercise, run `npx --yes @neatlogs/wizard@latest doctor --probe --json --install-dir .` with `NEATLOGS_API_KEY` supplied through the process environment. If it returns `BACKEND_DIAGNOSTIC_UNAVAILABLE`, no probe was sent: report that deployment blocker and leave diagnostic-stage verification incomplete. Never substitute a local span log, package installation, or an uncorrelated latest trace for doctor/backend evidence. The marker-correlated platform completion gate below remains a separate persistence check.
+
++## Live completion gate (wizard or standalone coding agent)
 
 This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
 
