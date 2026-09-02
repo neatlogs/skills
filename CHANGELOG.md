@@ -7,14 +7,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-03
+
 ### Added
 
-- Added the versioned wizard doctor gate to every Python, TypeScript, and Go instrumentation skill: read-only local preflight before edits, remediation only for explicitly fixable reason codes, and an authenticated probe after checks and real-path exercise.
+- Added the public `neatlogs.skills-support/v1` compatibility contract covering Skill, SDK, Wizard, telemetry-schema, integration, reason-code, and backend-diagnostic compatibility.
+- Added deterministic Skill archives with embedded public contracts, versioned canonical download URLs, SHA-256 digests, byte lengths, and a release checksum manifest.
+- Added a versioned compatibility gate to every public Skill: read-only detection before edits, fail-closed Doctor capability checks, public reason-code remediation, explicit approval, rollback, and idempotency requirements.
 
 ### Fixed
 
 - Removed the retired TypeScript `traceContent` and `NEATLOGS_TRACE_CONTENT` guidance.
 - Aligned TypeScript instrumentation guidance with the removed public registry: explicit wrappers, handlers, hooks, processors, and plugins are the only supported integration paths.
+- Replaced the misleading bundled-Wizard Doctor gate with truthful `DOCTOR_UNAVAILABLE` behavior until SDK Doctor v2 and correlated backend receipts are released.
+- Made automated edits fail closed, require a public allowlisted reason code plus user approval, and require rollback/idempotency checks.
 
 ## [1.2.4] - 2026-08-19
 
@@ -57,6 +63,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.3.0...HEAD
+[1.3.0]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...skills-v1.3.0
 [1.2.4]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...skills-v1.2.4
 [1.2.3]: https://github.com/neatlogs/skills/compare/skills-v1.2.2...skills-v1.2.3

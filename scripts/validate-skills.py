@@ -11,7 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -23,8 +26,16 @@ SKILLS_DIR = ROOT / "skills"
 MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 VALID_NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
-AWS_ACCESS_KEY = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")
+SECRET_PATTERNS = {
+    "AWS access key": re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+    "GitHub token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
+    "provider API key": re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    "private key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+}
 CONTRACT_DIR = ROOT / "contracts" / "v2"
+SUPPORT_PATH = ROOT / "contracts" / "skills-support-v1.json"
+RELEASE_BUILDER = ROOT / "scripts" / "build-skill-release.py"
+READINESS_MARKER = "<!-- neatlogs-readiness-v1 -->"
 EXPECTED_DIALECT_ORDER = [
     "native-v2",
     "neatlogs-direct",
@@ -93,6 +104,16 @@ def validate_skill(skill_dir: Path, errors: list[str]) -> str | None:
     elif len(description) > 1024:
         errors.append(f"{manifest.relative_to(ROOT)}: description exceeds 1024 characters")
 
+    manifest_text = manifest.read_text(encoding="utf-8")
+    if READINESS_MARKER not in manifest_text:
+        errors.append(
+            f"{manifest.relative_to(ROOT)}: missing the public compatibility and readiness gate"
+        )
+    if "@neatlogs/wizard@latest doctor" in manifest_text:
+        errors.append(
+            f"{manifest.relative_to(ROOT)}: must not substitute the Wizard's bundled Doctor for an SDK Doctor"
+        )
+
     skill_root = skill_dir.resolve()
     for path in sorted(skill_dir.rglob("*")):
         if path.is_symlink():
@@ -104,8 +125,12 @@ def validate_skill(skill_dir: Path, errors: list[str]) -> str | None:
         if not path.is_file():
             continue
         data = path.read_bytes()
-        if AWS_ACCESS_KEY.search(data.decode("utf-8", errors="ignore")):
-            errors.append(f"{path.relative_to(ROOT)}: looks like a live AWS access key")
+        decoded = data.decode("utf-8", errors="ignore")
+        for secret_name, pattern in SECRET_PATTERNS.items():
+            if pattern.search(decoded):
+                errors.append(
+                    f"{path.relative_to(ROOT)}: looks like a live {secret_name}"
+                )
         if path.suffix.lower() not in {".md", ".markdown"}:
             continue
         text = data.decode("utf-8")
@@ -281,6 +306,285 @@ def validate_contract(errors: list[str]) -> None:
         )
 
 
+def validate_support_contract(skill_names: set[str], errors: list[str]) -> None:
+    try:
+        support = json.loads(SUPPORT_PATH.read_text(encoding="utf-8"))
+        plugin = json.loads(
+            (ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
+        )
+        telemetry = json.loads(
+            (CONTRACT_DIR / "manifest.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"public Skill support contract is unreadable: {exc}")
+        return
+
+    if support.get("format_version") != "neatlogs.skills-support/v1":
+        errors.append("skills-support-v1.json: wrong format_version")
+    if support.get("skills_version") != plugin.get("version"):
+        errors.append("skills-support-v1.json: skills_version must match plugin version")
+
+    public_telemetry = support.get("telemetry_contract", {})
+    for key in ("contract_version", "schema_version", "schema_sha256"):
+        if public_telemetry.get(key) != telemetry.get(key):
+            errors.append(f"skills-support-v1.json: telemetry {key} is out of sync")
+
+    distribution = support.get("distribution", {})
+    version = str(support.get("skills_version", ""))
+    if distribution.get("repository") != "neatlogs/skills":
+        errors.append("skills-support-v1.json: distribution repository is not canonical")
+    if distribution.get("release_tag") != f"skills-v{version}":
+        errors.append("skills-support-v1.json: release tag does not match skills_version")
+    expected_prefix = (
+        f"https://github.com/neatlogs/skills/releases/download/skills-v{version}/"
+    )
+    if distribution.get("canonical_download_prefix") != expected_prefix:
+        errors.append("skills-support-v1.json: canonical download prefix is invalid")
+
+    doctor = support.get("doctor", {})
+    if doctor.get("required_format") != "neatlogs.doctor/v2":
+        errors.append("skills-support-v1.json: Doctor v2 must remain the required contract")
+    if doctor.get("availability") != "not_released":
+        errors.append(
+            "skills-support-v1.json: do not claim Doctor availability before Phase 9 releases"
+        )
+    if doctor.get("reason_code") != "DOCTOR_UNAVAILABLE":
+        errors.append("skills-support-v1.json: missing stable Doctor unavailable reason")
+    if any(
+        stack.get("doctor_command") is not None
+        for stack in support.get("stacks", {}).values()
+        if isinstance(stack, dict)
+    ):
+        errors.append(
+            "skills-support-v1.json: SDK Doctor commands must stay null until released"
+        )
+
+    expected_sdk_ranges = {
+        "python": ("neatlogs", ">=1.4.21 <2.0.0"),
+        "typescript": ("neatlogs", ">=1.1.19 <2.0.0"),
+        "go": ("github.com/neatlogs/neatlogs-go", ">=0.1.7 <0.2.0"),
+    }
+    stacks = support.get("stacks", {})
+    for stack_name, (package, version_range) in expected_sdk_ranges.items():
+        sdk = stacks.get(stack_name, {}).get("sdk", {})
+        if sdk.get("package") != package or sdk.get("version_range") != version_range:
+            errors.append(
+                f"skills-support-v1.json: {stack_name} SDK range is not the launch baseline"
+            )
+
+    expected_typescript_integrations = {
+        "anthropic",
+        "azure-openai",
+        "bedrock",
+        "browser",
+        "claude-agent-sdk",
+        "google-genai",
+        "langchain",
+        "mastra",
+        "openai",
+        "openai-agents",
+        "opencode",
+        "openrouter-agent",
+        "pi-agent",
+        "vercel-ai",
+        "vertex-ai",
+    }
+    if set(stacks.get("typescript", {}).get("integrations", [])) != expected_typescript_integrations:
+        errors.append("skills-support-v1.json: TypeScript integration support drifted")
+    unsupported_typescript = set(
+        stacks.get("typescript", {}).get("unsupported_surfaces", [])
+    )
+    if not {
+        "edge-runtime",
+        "instrumentations-init-option",
+        "strands-global-context-hooks",
+    }.issubset(unsupported_typescript):
+        errors.append("skills-support-v1.json: TypeScript unsupported surfaces drifted")
+
+    backend = support.get("backend_diagnostic", {})
+    if (
+        backend.get("availability") != "not_deployed"
+        or backend.get("reason_code") != "BACKEND_DIAGNOSTIC_UNAVAILABLE"
+    ):
+        errors.append("skills-support-v1.json: backend probe availability is overstated")
+
+    targets = support.get("skill_targets", {})
+    if set(targets) != skill_names:
+        missing = sorted(skill_names - set(targets))
+        extra = sorted(set(targets) - skill_names)
+        errors.append(
+            f"skills-support-v1.json: skill_targets mismatch; missing={missing}, extra={extra}"
+        )
+    for skill_name, target in targets.items():
+        if not isinstance(target, dict):
+            errors.append(f"skills-support-v1.json: invalid target for {skill_name}")
+            continue
+        stack_name = target.get("stack")
+        integration = target.get("integration")
+        if stack_name in {"python", "typescript", "go", "direct-ingest"}:
+            supported = set(stacks.get(stack_name, {}).get("integrations", []))
+            if integration != "generic" and integration not in supported:
+                errors.append(
+                    f"skills-support-v1.json: {skill_name} targets unsupported {integration!r}"
+                )
+        elif stack_name != "multi":
+            errors.append(f"skills-support-v1.json: {skill_name} has unknown stack {stack_name!r}")
+
+    allowlist = support.get("safe_fix_allowlist", {})
+    if allowlist.get("requires_doctor_format") != "neatlogs.doctor/v2":
+        errors.append("skills-support-v1.json: safe fixes must require Doctor v2")
+    allowed_codes = {
+        item.get("reason_code")
+        for item in allowlist.get("entries", [])
+        if isinstance(item, dict)
+    }
+    if allowed_codes != {
+        "SDK_VERSION_UNSUPPORTED",
+        "INSTRUMENTOR_NOT_ACTIVE",
+        "ATTRIBUTE_CONFLICT",
+    }:
+        errors.append("skills-support-v1.json: safe fix allowlist changed unexpectedly")
+    if any(
+        not item.get("requires_user_approval")
+        for item in allowlist.get("entries", [])
+        if isinstance(item, dict)
+    ):
+        errors.append("skills-support-v1.json: every safe fix must require approval")
+
+
+def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
+    try:
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            for output in (first, second):
+                subprocess.run(
+                    [sys.executable, str(RELEASE_BUILDER), "--output", output],
+                    cwd=ROOT,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            first_dir = Path(first)
+            second_dir = Path(second)
+            first_files = {
+                path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in first_dir.iterdir()
+                if path.is_file()
+            }
+            second_files = {
+                path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in second_dir.iterdir()
+                if path.is_file()
+            }
+            if first_files != second_files:
+                errors.append("Skill release assets are not reproducible")
+                return
+
+            menu = json.loads((first_dir / "skill-menu.json").read_text(encoding="utf-8"))
+            if menu.get("formatVersion") != "neatlogs.skill-menu/v1":
+                errors.append("skill-menu.json: wrong formatVersion")
+            entries = menu.get("categories", {}).get("setup", [])
+            if {entry.get("id") for entry in entries} != skill_names:
+                errors.append("skill-menu.json: packaged Skill set is incomplete")
+            for entry in entries:
+                archive = first_dir / f"{entry['id']}.zip"
+                data = archive.read_bytes()
+                if entry.get("sha256") != hashlib.sha256(data).hexdigest():
+                    errors.append(f"skill-menu.json: wrong digest for {entry['id']}")
+                if entry.get("bytes") != len(data):
+                    errors.append(f"skill-menu.json: wrong byte length for {entry['id']}")
+                with zipfile.ZipFile(archive) as package:
+                    names = set(package.namelist())
+                    expected_support = (
+                        f"{entry['id']}/.neatlogs/skills-support-v1.json"
+                    )
+                    if expected_support not in names:
+                        errors.append(f"{archive.name}: missing packaged support contract")
+                    if any(
+                        name.startswith("/") or ".." in Path(name).parts for name in names
+                    ):
+                        errors.append(f"{archive.name}: unsafe archive path")
+
+            clean_projects = {
+                "python": (
+                    "neatlogs-py",
+                    {
+                        "pyproject.toml": '[project]\nname = "clean-python"\nversion = "0.1.0"\n',
+                        "app.py": "def main():\n    return 'clean'\n",
+                    },
+                    "import neatlogs\nneatlogs.init()\n",
+                ),
+                "node": (
+                    "neatlogs-ts",
+                    {
+                        "package.json": '{"name":"clean-node","version":"0.1.0"}\n',
+                        "index.ts": "export const main = () => 'clean';\n",
+                    },
+                    "import { init } from 'neatlogs';\nawait init();\n",
+                ),
+                "go": (
+                    "neatlogs-go",
+                    {
+                        "go.mod": "module example.com/clean\n\ngo 1.25.0\n",
+                        "main.go": "package main\n\nfunc main() {}\n",
+                    },
+                    'package main\n\nimport neatlogs "github.com/neatlogs/neatlogs-go"\n\nvar _ = neatlogs.Version\n',
+                ),
+            }
+            for stack, (skill_id, clean_files, instrumented_source) in clean_projects.items():
+                for state in ("clean", "already-instrumented"):
+                    with tempfile.TemporaryDirectory() as project_directory:
+                        project = Path(project_directory)
+                        files = dict(clean_files)
+                        source_name = next(
+                            name
+                            for name in files
+                            if name.endswith((".py", ".ts", ".go"))
+                        )
+                        if state == "already-instrumented":
+                            files[source_name] = instrumented_source
+                        for relative, content in files.items():
+                            target = project / relative
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_text(content, encoding="utf-8")
+                        source_digests = {
+                            relative: hashlib.sha256((project / relative).read_bytes()).hexdigest()
+                            for relative in files
+                        }
+                        destination = project / ".claude" / "skills"
+                        destination.mkdir(parents=True)
+                        archive = first_dir / f"{skill_id}.zip"
+                        with zipfile.ZipFile(archive) as package:
+                            package.extractall(destination)
+                        first_install = {
+                            path.relative_to(destination).as_posix(): hashlib.sha256(
+                                path.read_bytes()
+                            ).hexdigest()
+                            for path in destination.rglob("*")
+                            if path.is_file()
+                        }
+                        with zipfile.ZipFile(archive) as package:
+                            package.extractall(destination)
+                        second_install = {
+                            path.relative_to(destination).as_posix(): hashlib.sha256(
+                                path.read_bytes()
+                            ).hexdigest()
+                            for path in destination.rglob("*")
+                            if path.is_file()
+                        }
+                        if first_install != second_install:
+                            errors.append(
+                                f"{stack} {state} Skill installation is not idempotent"
+                            )
+                        for relative, expected in source_digests.items():
+                            actual = hashlib.sha256((project / relative).read_bytes()).hexdigest()
+                            if actual != expected:
+                                errors.append(
+                                    f"{stack} {state} Skill installation modified {relative}"
+                                )
+    except (OSError, KeyError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
+        errors.append(f"Skill release asset validation failed: {exc}")
+
+
 def main() -> int:
     errors: list[str] = []
     names: list[str] = []
@@ -295,6 +599,8 @@ def main() -> int:
 
     validate_plugin_metadata(set(names), errors)
     validate_contract(errors)
+    validate_support_contract(set(names), errors)
+    validate_release_assets(set(names), errors)
 
     if errors:
         for error in errors:

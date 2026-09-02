@@ -23,6 +23,14 @@ Never send the nested HTTP-ingest JSON body to `/v1/traces`.
 
 For retrieval attributes set directly by the caller, emit `neatlogs.retriever.*`. OpenTelemetry-native sources may emit `gen_ai.retrieval.*`; Neatlogs maps those during ingestion. Do not emit the legacy `neatlogs.retrieval.*` namespace from new integrations.
 
+<!-- neatlogs-readiness-v1 -->
+
+## Compatibility and safe-change gate
+
+Before editing, detect the language, package manager, existing OTel pipeline, and exact ingest route without changing files. Read the packaged `.neatlogs/skills-support-v1.json` contract. In a source checkout, use `contracts/skills-support-v1.json`.
+
+The current contract has no released local Doctor for direct ingest and no deployed correlated backend diagnostic receipt. Stop automatic source editing with `DOCTOR_UNAVAILABLE`; do not substitute connectivity, HTTP 2xx, a local export, or an uncorrelated trace. A user may explicitly approve a manual change from these public route contracts, but show the exact files, commands, and diff first, keep credentials out of source and agent context, and report verification as incomplete until a correlated backend receipt passes. Roll back only this run's changes if approved checks fail, and require a second run to make no unnecessary edits.
+
 ## Live completion gate (wizard or standalone coding agent)
 
 - Show concise, secret-free progress for transport selection, edits/configuration, validation/build, process restart, real-path exercise, and platform confirmation.
