@@ -4,7 +4,9 @@ AI agent skills for [Neatlogs](https://neatlogs.com) — the observability and t
 
 These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.) expert knowledge of the NeatLogs SDK so it can correctly instrument your code, set up tracing, and debug issues.
 
-The public, language-neutral telemetry contract shared by every SDK, the backend, and the wizard lives in [`contracts/v2`](./contracts/v2/). Its manifest pins the exact schema digest and its golden fixtures lock multi-choice LLM output, assistant tool requests, separate linked and unlinked TOOL executions, and recovered-root semantics.
+The public, language-neutral telemetry contract for SDK and integration compatibility lives in [`contracts/v2`](./contracts/v2/). Its manifest pins the exact schema digest and its golden fixtures lock multi-choice LLM output, assistant tool requests, separate linked and unlinked TOOL executions, and recovered-root semantics. Each runtime repository validates its own vendored copy before release.
+
+The installed SDK Doctor output contract lives in [`contracts/doctor/v2`](./contracts/doctor/v2/). It defines credential-safe local and probe results without exposing internal service topology.
 
 ## Available skills
 
