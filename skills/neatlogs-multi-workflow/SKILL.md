@@ -21,14 +21,6 @@ For managed Neatlogs, do not add an endpoint/base URL option or `NEATLOGS_ENDPOI
 
 Canonical docs: https://docs.neatlogs.com/sdk/multiple-workflows
 
-<!-- neatlogs-readiness-v1 -->
-
-## Compatibility and safe-change gate
-
-Before editing, detect every affected language, package manager, service boundary, installed SDK version, and existing workflow instrumentation. Read the packaged `.neatlogs/skills-support-v1.json` contract. In a source checkout, use `contracts/skills-support-v1.json`, then apply the matching language stack to each process.
-
-The current contract truthfully marks `neatlogs.doctor/v2` and the correlated backend diagnostic contract as unavailable. Stop automatic source editing with `DOCTOR_UNAVAILABLE`; do not use the Wizard's bundled Doctor v1 fixture or an uncorrelated trace as a substitute. A user may explicitly approve a manual documented change, but show each diff and command first, keep credentials outside source and agent context, roll back only this run's edits if checks fail, and leave verification incomplete until every workflow passes the released Doctor and correlated probe. A second run must produce no unnecessary changes.
-
 ## Completion gate
 
 Do not report success after editing files alone. Build the affected package or application, restart the real process, and exercise every changed workflow entry point. This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.

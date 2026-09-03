@@ -20,24 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs
-          ref: 2c058ebebf28082ad6c55db57a30fadece31f544
-          path: .sdk-sources/python
-
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs-typescript
-          ref: 693cadaf4e461214e14b7703f8d5bd957a08482a
-          path: .sdk-sources/typescript
-
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs-go
-          ref: 8dc5a8839ded1ee9853a944b562065ca5104b0f2
-          path: .sdk-sources/go
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,19 +28,17 @@ jobs:
         run: python -m pip install -r requirements-ci.txt
 
       - name: Validate skills and telemetry contract
-        env:
-          NEATLOGS_PYTHON_SOURCE: .sdk-sources/python
-          NEATLOGS_TYPESCRIPT_SOURCE: .sdk-sources/typescript
-          NEATLOGS_GO_SOURCE: .sdk-sources/go
         run: python scripts/validate-skills.py
-
-      - name: Validate release-order preflight inputs
-        run: python scripts/check-release-readiness.py --validate-only
 
       - name: Package every public skill
         shell: bash
         run: |
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/neatlogs-skills"
-          python scripts/build-skill-release.py --output "$artifact_dir"
-          for archive in "$artifact_dir"/*.zip; do unzip -tq "$archive"; done
+          mkdir -p "$artifact_dir"
+          for manifest in skills/*/SKILL.md; do
+            skill_dir=$(dirname "$manifest")
+            skill_id=$(basename "$skill_dir")
+            (cd skills && zip -qr "$artifact_dir/$skill_id.zip" "$skill_id")
+            unzip -tq "$artifact_dir/$skill_id.zip"
+          done

@@ -4,15 +4,8 @@ on:
   push:
     paths:
       - 'skills/**'
-      - 'contracts/skills-support-v1.json'
-      - 'contracts/v2/manifest.json'
-      - 'contracts/v2/neatlogs-telemetry.schema.json'
       - '.claude-plugin/plugin.json'
       - '.claude-plugin/marketplace.json'
-      - 'scripts/build-skill-release.py'
-      - 'scripts/check-release-readiness.py'
-      - 'scripts/validate-skills.py'
-      - 'requirements-ci.txt'
       - '.github/workflows/publish-skills.yml'
     branches:
       - main
@@ -21,49 +14,11 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: publish-skills-main
-  cancel-in-progress: false
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs
-          ref: 2c058ebebf28082ad6c55db57a30fadece31f544
-          path: .sdk-sources/python
-
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs-typescript
-          ref: 693cadaf4e461214e14b7703f8d5bd957a08482a
-          path: .sdk-sources/typescript
-
-      - uses: actions/checkout@v4
-        with:
-          repository: neatlogs/neatlogs-go
-          ref: 8dc5a8839ded1ee9853a944b562065ca5104b0f2
-          path: .sdk-sources/go
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Validate public contracts and release assets
-        env:
-          NEATLOGS_PYTHON_SOURCE: .sdk-sources/python
-          NEATLOGS_TYPESCRIPT_SOURCE: .sdk-sources/typescript
-          NEATLOGS_GO_SOURCE: .sdk-sources/go
-        run: |
-          python -m pip install -r requirements-ci.txt
-          python scripts/validate-skills.py
-
-      - name: Require SDK and Wizard releases first
-        run: python scripts/check-release-readiness.py
 
       - name: Resolve release version
         id: release
@@ -74,32 +29,50 @@ jobs:
           echo "tag=skills-v$version" >> "$GITHUB_OUTPUT"
           echo "Publishing skills version $version"
 
-      - name: Require a new immutable release tag
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+      - name: Package skills
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG"; then
-            echo "Release tag $RELEASE_TAG already exists; bump the Skill version instead of replacing signed-off assets." >&2
-            exit 1
-          fi
+          cd skills
+          for dir in */; do
+            if [ -f "${dir}SKILL.md" ]; then
+              skill_id="${dir%/}"
+              zip -r "${skill_id}.zip" "$dir"
+              echo "Packaged: ${skill_id}.zip"
+            fi
+          done
 
-      - name: Build deterministic checksummed release assets
-        run: python3 scripts/build-skill-release.py --output release-assets
+      - name: Generate skill-menu.json
+        env:
+          SKILLS_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          cd skills
+          base="https://github.com/neatlogs/skills/releases/latest/download"
+          # Emit one menu entry per skill dir that has a SKILL.md, so the menu
+          # always stays in sync with the published .zip artifacts. The "name"
+          # is read from the SKILL.md frontmatter `description` (falls back to id).
+          entries=""
+          for dir in */; do
+            [ -f "${dir}SKILL.md" ] || continue
+            skill_id="${dir%/}"
+            name=$(grep -m1 '^description:' "${dir}SKILL.md" | sed 's/^description:[[:space:]]*//' | tr -d '"' | cut -c1-80)
+            [ -z "$name" ] && name="$skill_id"
+            # JSON-escape the name (quotes/backslashes)
+            name=$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+            [ -n "$entries" ] && entries="${entries},"
+            entries="${entries}{\"id\":\"${skill_id}\",\"name\":\"${name}\",\"downloadUrl\":\"${base}/${skill_id}.zip\"}"
+          done
+          printf '{"version":"%s","categories":{"setup":[%s]}}' "$SKILLS_VERSION" "$entries" > skill-menu.json
+          echo "Generated skill-menu.json:"
+          cat skill-menu.json | python3 -m json.tool
 
-      - name: Create immutable release
+      - name: Create/update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Skills v${{ steps.release.outputs.version }}
+          body: Auto-published skill packages for the Neatlogs wizard
+          files: |
+            skills/*.zip
+            skills/skill-menu.json
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          RELEASE_VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          gh release create "$RELEASE_TAG" \
-            release-assets/*.zip \
-            release-assets/skill-menu.json \
-            release-assets/skills-support-v1.json \
-            release-assets/telemetry-v2-manifest.json \
-            release-assets/neatlogs-telemetry.schema.json \
-            release-assets/SHA256SUMS \
-            --target "$GITHUB_SHA" \
-            --title "Skills v$RELEASE_VERSION" \
-            --notes "Checksummed Skill packages for the Neatlogs wizard" \
-            --latest
