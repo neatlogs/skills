@@ -7,12 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-### Added
-
-- Added the versioned wizard doctor gate to every Python, TypeScript, and Go instrumentation skill: read-only local preflight before edits, remediation only for explicitly fixable reason codes, and an authenticated probe after checks and real-path exercise.
+## [1.2.5] - 2026-09-03
 
 ### Fixed
 
+- Removed the pre-edit Doctor requirement so a downloaded Skill can immediately instrument the requested code; Doctor remains a separate diagnostic workflow.
 - Removed the retired TypeScript `traceContent` and `NEATLOGS_TRACE_CONTENT` guidance.
 - Aligned TypeScript instrumentation guidance with the removed public registry: explicit wrappers, handlers, hooks, processors, and plugins are the only supported integration paths.
 
@@ -57,6 +56,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...HEAD
+[1.2.5]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...skills-v1.2.5
 [1.2.4]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...skills-v1.2.4
 [1.2.3]: https://github.com/neatlogs/skills/compare/skills-v1.2.2...skills-v1.2.3

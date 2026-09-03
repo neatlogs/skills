@@ -11,7 +11,7 @@
       "name": "neatlogs-py",
       "source": ".",
       "description": "Instrument Python LLM applications with the neatlogs SDK — tracing, semantic spans, supported wrappers and framework integrations for OpenAI, Anthropic, LangChain, CrewAI, and more.",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "category": "observability",
       "keywords": [
         "neatlogs",
@@ -34,7 +34,7 @@
       "name": "neatlogs-ts",
       "source": ".",
       "description": "Instrument TypeScript/Node.js LLM applications with the neatlogs SDK — semantic spans, supported wrappers and framework integrations for OpenAI, Anthropic, LangChain, Mastra, Vercel AI SDK, and more.",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "category": "observability",
       "keywords": [
         "neatlogs",
@@ -58,7 +58,7 @@
       "name": "neatlogs-go",
       "source": ".",
       "description": "Instrument Go LLM applications with the neatlogs SDK — Gemini via WrapGenAI, direct or unsupported providers via explicit span helpers, custom boundaries, and per-request identity.",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "category": "observability",
       "keywords": [
         "neatlogs",
@@ -83,7 +83,7 @@
       "name": "neatlogs-ingest",
       "source": ".",
       "description": "Send traces to Neatlogs from unsupported languages with dependency-free HTTP ingest at POST /v1/trace, or configure OTLP/gRPC for existing OpenTelemetry applications and Collectors.",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "category": "observability",
       "keywords": [
         "neatlogs",
