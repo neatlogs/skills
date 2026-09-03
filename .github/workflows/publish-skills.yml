@@ -6,9 +6,11 @@ on:
       - 'skills/**'
       - 'contracts/skills-support-v1.json'
       - 'contracts/v2/manifest.json'
+      - 'contracts/v2/neatlogs-telemetry.schema.json'
       - '.claude-plugin/plugin.json'
       - '.claude-plugin/marketplace.json'
       - 'scripts/build-skill-release.py'
+      - 'scripts/check-release-readiness.py'
       - 'scripts/validate-skills.py'
       - 'requirements-ci.txt'
       - '.github/workflows/publish-skills.yml'
@@ -19,20 +21,49 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: publish-skills-main
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs
+          ref: 627820ca00016057a82dc87a447892383682d36a
+          path: .sdk-sources/python
+
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs-typescript
+          ref: dc850727ffe00e23759650b38150e4ff3e688301
+          path: .sdk-sources/typescript
+
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs-go
+          ref: 8dc5a8839ded1ee9853a944b562065ca5104b0f2
+          path: .sdk-sources/go
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Validate public contracts and release assets
+        env:
+          NEATLOGS_PYTHON_SOURCE: .sdk-sources/python
+          NEATLOGS_TYPESCRIPT_SOURCE: .sdk-sources/typescript
+          NEATLOGS_GO_SOURCE: .sdk-sources/go
         run: |
           python -m pip install -r requirements-ci.txt
           python scripts/validate-skills.py
+
+      - name: Require SDK and Wizard releases first
+        run: python scripts/check-release-readiness.py
 
       - name: Resolve release version
         id: release
@@ -55,17 +86,20 @@ jobs:
       - name: Build deterministic checksummed release assets
         run: python3 scripts/build-skill-release.py --output release-assets
 
-      - name: Create/update release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: Skills v${{ steps.release.outputs.version }}
-          body: Auto-published skill packages for the Neatlogs wizard
-          files: |
-            release-assets/*.zip
-            release-assets/skill-menu.json
-            release-assets/skills-support-v1.json
-            release-assets/SHA256SUMS
-          make_latest: true
+      - name: Create immutable release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            release-assets/*.zip \
+            release-assets/skill-menu.json \
+            release-assets/skills-support-v1.json \
+            release-assets/telemetry-v2-manifest.json \
+            release-assets/neatlogs-telemetry.schema.json \
+            release-assets/SHA256SUMS \
+            --target "$GITHUB_SHA" \
+            --title "Skills v$RELEASE_VERSION" \
+            --notes "Checksummed Skill packages for the Neatlogs wizard" \
+            --latest

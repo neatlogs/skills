@@ -6,7 +6,7 @@ These skills give your coding agent (Claude Code, Cursor, Codex, Windsurf, etc.)
 
 The public, language-neutral telemetry contract shared by every SDK, the backend, and the wizard lives in [`contracts/v2`](./contracts/v2/). Its manifest pins the exact schema digest and its golden fixtures lock multi-choice LLM output, assistant tool requests, separate linked and unlinked TOOL executions, and recovered-root semantics.
 
-Public Skill behavior and compatibility are versioned separately in [`contracts/skills-support-v1.json`](./contracts/skills-support-v1.json). It lists supported SDK/runtime ranges, integration targets, stable public reason codes, the safe-fix allowlist, and the availability of Doctor and backend diagnostic contracts. Published archives embed this contract and are pinned by SHA-256 in the release menu.
+Public Skill behavior and compatibility are versioned separately in [`contracts/skills-support-v1.json`](./contracts/skills-support-v1.json). It lists supported SDK/runtime ranges, source-pinned per-integration package and instrumentation mechanisms, stable public reason codes, the safe-fix allowlist, and the availability of Doctor and backend diagnostic contracts. Published archives embed this contract and are pinned by SHA-256 in the release menu. Skills publish only after all contracted SDK and Wizard versions are public, and existing release tags are never updated.
 
 ## Available skills
 

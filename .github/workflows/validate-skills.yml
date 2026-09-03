@@ -20,6 +20,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs
+          ref: 627820ca00016057a82dc87a447892383682d36a
+          path: .sdk-sources/python
+
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs-typescript
+          ref: dc850727ffe00e23759650b38150e4ff3e688301
+          path: .sdk-sources/typescript
+
+      - uses: actions/checkout@v4
+        with:
+          repository: neatlogs/neatlogs-go
+          ref: 8dc5a8839ded1ee9853a944b562065ca5104b0f2
+          path: .sdk-sources/go
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -28,7 +46,14 @@ jobs:
         run: python -m pip install -r requirements-ci.txt
 
       - name: Validate skills and telemetry contract
+        env:
+          NEATLOGS_PYTHON_SOURCE: .sdk-sources/python
+          NEATLOGS_TYPESCRIPT_SOURCE: .sdk-sources/typescript
+          NEATLOGS_GO_SOURCE: .sdk-sources/go
         run: python scripts/validate-skills.py
+
+      - name: Validate release-order preflight inputs
+        run: python scripts/check-release-readiness.py --validate-only
 
       - name: Package every public skill
         shell: bash

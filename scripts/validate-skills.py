@@ -9,8 +9,11 @@ plugin metadata, and archive boundaries must be correct before publication.
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,6 +48,20 @@ EXPECTED_DIALECT_ORDER = [
     "external-legacy",
     "unknown-raw",
 ]
+EXPECTED_SOURCE_BASELINES = {
+    "python": (
+        "neatlogs/neatlogs",
+        "627820ca00016057a82dc87a447892383682d36a",
+    ),
+    "typescript": (
+        "neatlogs/neatlogs-typescript",
+        "dc850727ffe00e23759650b38150e4ff3e688301",
+    ),
+    "go": (
+        "neatlogs/neatlogs-go",
+        "8dc5a8839ded1ee9853a944b562065ca5104b0f2",
+    ),
+}
 
 
 def frontmatter(path: Path) -> dict[str, str]:
@@ -157,6 +174,14 @@ def validate_plugin_metadata(skill_names: set[str], errors: list[str]) -> None:
     version = str(plugin.get("version", ""))
     if not SEMVER.fullmatch(version):
         errors.append(f"{plugin_path.relative_to(ROOT)}: version {version!r} is not x.y.z")
+    try:
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        if f"## [{version}]" not in changelog:
+            errors.append(f"CHANGELOG.md: missing the plugin version {version}")
+        if f"compare/skills-v{version}...HEAD" not in changelog:
+            errors.append("CHANGELOG.md: Unreleased comparison does not start at the plugin version")
+    except OSError as exc:
+        errors.append(f"CHANGELOG.md is unreadable: {exc}")
 
     plugins = marketplace.get("plugins")
     if not isinstance(plugins, list) or not plugins:
@@ -200,6 +225,10 @@ def validate_contract(errors: list[str]) -> None:
         errors.append(f"{manifest_path.relative_to(ROOT)}: schema_version must be 2")
     if schema.get("$id") != manifest.get("schema_id"):
         errors.append(f"{manifest_path.relative_to(ROOT)}: schema_id must equal schema $id")
+    if manifest.get("authority") != (
+        "https://github.com/neatlogs/skills/tree/skills-v1.3.0/contracts/v2"
+    ):
+        errors.append(f"{manifest_path.relative_to(ROOT)}: authority must be immutable")
 
     try:
         Draft202012Validator.check_schema(schema)
@@ -340,6 +369,11 @@ def validate_support_contract(skill_names: set[str], errors: list[str]) -> None:
     )
     if distribution.get("canonical_download_prefix") != expected_prefix:
         errors.append("skills-support-v1.json: canonical download prefix is invalid")
+    expected_authority = (
+        f"https://github.com/neatlogs/skills/tree/skills-v{version}/contracts/v2"
+    )
+    if public_telemetry.get("authority") != expected_authority:
+        errors.append("skills-support-v1.json: telemetry authority is not immutable")
 
     doctor = support.get("doctor", {})
     if doctor.get("required_format") != "neatlogs.doctor/v2":
@@ -372,6 +406,55 @@ def validate_support_contract(skill_names: set[str], errors: list[str]) -> None:
                 f"skills-support-v1.json: {stack_name} SDK range is not the launch baseline"
             )
 
+    source_baselines = support.get("source_baselines", {})
+    for stack_name, (repository, revision) in EXPECTED_SOURCE_BASELINES.items():
+        baseline = source_baselines.get(stack_name, {})
+        if (
+            baseline.get("repository") != repository
+            or baseline.get("revision") != revision
+            or not baseline.get("manifest")
+            or not baseline.get("integration_registry")
+        ):
+            errors.append(
+                f"skills-support-v1.json: {stack_name} source baseline is not pinned"
+            )
+
+    for stack_name, stack in stacks.items():
+        if not isinstance(stack, dict):
+            errors.append(f"skills-support-v1.json: invalid stack {stack_name!r}")
+            continue
+        integrations = stack.get("integrations", [])
+        contracts = stack.get("integration_contracts", {})
+        if set(integrations) != set(contracts):
+            errors.append(
+                f"skills-support-v1.json: {stack_name} integration metadata is incomplete"
+            )
+        for integration, metadata in contracts.items():
+            if not isinstance(metadata, dict):
+                errors.append(
+                    f"skills-support-v1.json: {stack_name}/{integration} metadata is invalid"
+                )
+                continue
+            required = {"package", "mechanism", "entrypoint", "value", "detected_ids"}
+            if not required.issubset(metadata) or not all(
+                isinstance(metadata.get(key), str) and metadata.get(key)
+                for key in required - {"detected_ids"}
+            ):
+                errors.append(
+                    f"skills-support-v1.json: {stack_name}/{integration} lacks a public package/import mechanism"
+                )
+            if not isinstance(metadata.get("detected_ids"), list) or not metadata.get(
+                "detected_ids"
+            ):
+                errors.append(
+                    f"skills-support-v1.json: {stack_name}/{integration} lacks detected IDs"
+                )
+            baselines = [metadata.get("version_range"), metadata.get("api_contract")]
+            if sum(isinstance(value, str) and bool(value) for value in baselines) != 1:
+                errors.append(
+                    f"skills-support-v1.json: {stack_name}/{integration} must declare exactly one version range or API baseline"
+                )
+
     expected_typescript_integrations = {
         "anthropic",
         "azure-openai",
@@ -400,6 +483,18 @@ def validate_support_contract(skill_names: set[str], errors: list[str]) -> None:
         "strands-global-context-hooks",
     }.issubset(unsupported_typescript):
         errors.append("skills-support-v1.json: TypeScript unsupported surfaces drifted")
+
+    expected_python_additions = {
+        "azure_openai",
+        "vertexai",
+        "vertex_ai",
+        "openrouter",
+        "claude_agent_sdk",
+    }
+    if not expected_python_additions.issubset(
+        set(stacks.get("python", {}).get("integrations", []))
+    ):
+        errors.append("skills-support-v1.json: current Python wrappers are missing")
 
     backend = support.get("backend_diagnostic", {})
     if (
@@ -451,6 +546,115 @@ def validate_support_contract(skill_names: set[str], errors: list[str]) -> None:
     ):
         errors.append("skills-support-v1.json: every safe fix must require approval")
 
+    validate_sdk_sources(support, errors)
+
+
+def validate_sdk_sources(support: dict[str, object], errors: list[str]) -> None:
+    """Cross-check pinned SDK checkouts when CI/local paths are available."""
+    source_env = {
+        "python": "NEATLOGS_PYTHON_SOURCE",
+        "typescript": "NEATLOGS_TYPESCRIPT_SOURCE",
+        "go": "NEATLOGS_GO_SOURCE",
+    }
+    stacks = support.get("stacks", {})
+    baselines = support.get("source_baselines", {})
+    if not isinstance(stacks, dict) or not isinstance(baselines, dict):
+        return
+    for stack_name, env_name in source_env.items():
+        raw_path = os.environ.get(env_name)
+        if not raw_path:
+            continue
+        source = Path(raw_path).resolve()
+        try:
+            revision = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=source,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError) as exc:
+            errors.append(f"{env_name}: cannot read pinned source: {exc}")
+            continue
+        baseline = baselines.get(stack_name, {})
+        if not isinstance(baseline, dict) or revision != baseline.get("revision"):
+            errors.append(f"{env_name}: checkout does not match the pinned revision")
+            continue
+
+        stack = stacks.get(stack_name, {})
+        contracts = stack.get("integration_contracts", {}) if isinstance(stack, dict) else {}
+        if stack_name == "python":
+            try:
+                manifest = (source / "pyproject.toml").read_text(encoding="utf-8")
+                registry_tree = ast.parse(
+                    (source / "neatlogs/instrumentation/registry.py").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                registry: dict[str, object] = {}
+                for node in registry_tree.body:
+                    if isinstance(node, ast.Assign) and any(
+                        isinstance(target, ast.Name)
+                        and target.id == "INSTRUMENTATION_REGISTRY"
+                        for target in node.targets
+                    ):
+                        registry = ast.literal_eval(node.value)
+                        break
+                keys = set(registry.get("libraries", {}))
+                declared = set(contracts)
+                if not declared.issubset(keys):
+                    errors.append(
+                        f"{env_name}: Python integrations missing from the SDK registry: "
+                        f"{sorted(declared - keys)}"
+                    )
+                if 'version = "1.4.21"' not in manifest:
+                    errors.append(f"{env_name}: Python package version drifted")
+            except (OSError, SyntaxError, ValueError) as exc:
+                errors.append(f"{env_name}: Python source contract unreadable: {exc}")
+        elif stack_name == "typescript":
+            try:
+                package = json.loads((source / "package.json").read_text(encoding="utf-8"))
+                if package.get("version") != "1.1.19" or package.get("engines", {}).get(
+                    "node"
+                ) != ">=18.0.0":
+                    errors.append(f"{env_name}: TypeScript package baseline drifted")
+                exports = set(package.get("exports", {}))
+                for metadata in contracts.values():
+                    if not isinstance(metadata, dict):
+                        continue
+                    entrypoint = metadata.get("entrypoint")
+                    if isinstance(entrypoint, str) and entrypoint.startswith("neatlogs/"):
+                        if f"./{entrypoint.removeprefix('neatlogs/')}" not in exports:
+                            errors.append(
+                                f"{env_name}: missing published export {entrypoint}"
+                            )
+                strands = (source / "src/strands.ts").read_text(encoding="utf-8")
+                if "strandsHooks" in contracts or "not supported" not in strands:
+                    errors.append(f"{env_name}: TypeScript Strands support is overstated")
+            except (OSError, json.JSONDecodeError) as exc:
+                errors.append(f"{env_name}: TypeScript source contract unreadable: {exc}")
+        else:
+            try:
+                go_mod = (source / "go.mod").read_text(encoding="utf-8")
+                if (
+                    "module github.com/neatlogs/neatlogs-go" not in go_mod
+                    or "go 1.25.0" not in go_mod
+                ):
+                    errors.append(f"{env_name}: Go package baseline drifted")
+                genai_source = "\n".join(
+                    path.read_text(encoding="utf-8")
+                    for path in (source / "contrib/genai").glob("*.go")
+                )
+                root_source = "\n".join(
+                    path.read_text(encoding="utf-8") for path in source.glob("*.go")
+                )
+                if "func WrapGenAI" not in genai_source:
+                    errors.append(f"{env_name}: WrapGenAI is not implemented")
+                if "func StartLLMSpan" not in root_source:
+                    errors.append(f"{env_name}: StartLLMSpan is not implemented")
+            except OSError as exc:
+                errors.append(f"{env_name}: Go source contract unreadable: {exc}")
+
 
 def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
     try:
@@ -499,25 +703,53 @@ def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
                     )
                     if expected_support not in names:
                         errors.append(f"{archive.name}: missing packaged support contract")
+                    manifest_name = (
+                        f"{entry['id']}/.neatlogs/telemetry-v2-manifest.json"
+                    )
+                    schema_name = (
+                        f"{entry['id']}/.neatlogs/neatlogs-telemetry.schema.json"
+                    )
+                    if manifest_name not in names or schema_name not in names:
+                        errors.append(f"{archive.name}: missing packaged telemetry contract")
+                    else:
+                        embedded_manifest = json.loads(package.read(manifest_name))
+                        embedded_schema = package.read(schema_name)
+                        if embedded_manifest != json.loads(
+                            (CONTRACT_DIR / "manifest.json").read_text(encoding="utf-8")
+                        ):
+                            errors.append(f"{archive.name}: telemetry manifest drifted")
+                        if hashlib.sha256(embedded_schema).hexdigest() != embedded_manifest.get(
+                            "schema_sha256"
+                        ):
+                            errors.append(f"{archive.name}: telemetry schema digest drifted")
                     if any(
                         name.startswith("/") or ".." in Path(name).parts for name in names
                     ):
                         errors.append(f"{archive.name}: unsafe archive path")
+
+            published_manifest = first_dir / "telemetry-v2-manifest.json"
+            published_schema = first_dir / "neatlogs-telemetry.schema.json"
+            if (
+                published_manifest.read_bytes() != (CONTRACT_DIR / "manifest.json").read_bytes()
+                or published_schema.read_bytes()
+                != (CONTRACT_DIR / "neatlogs-telemetry.schema.json").read_bytes()
+            ):
+                errors.append("release-level telemetry contract assets drifted")
 
             clean_projects = {
                 "python": (
                     "neatlogs-py",
                     {
                         "pyproject.toml": '[project]\nname = "clean-python"\nversion = "0.1.0"\n',
-                        "app.py": "def main():\n    return 'clean'\n",
+                        "app.py": "def main():\n    return 'clean'\n\nassert main() == 'clean'\n",
                     },
-                    "import neatlogs\nneatlogs.init()\n",
+                    "import neatlogs\nneatlogs.init()\nassert neatlogs.initialized\n",
                 ),
                 "node": (
                     "neatlogs-ts",
                     {
-                        "package.json": '{"name":"clean-node","version":"0.1.0"}\n',
-                        "index.ts": "export const main = () => 'clean';\n",
+                        "package.json": '{"name":"clean-node","version":"0.1.0","type":"module"}\n',
+                        "index.mjs": "export const main = () => 'clean';\nif (main() !== 'clean') throw new Error('smoke failed');\n",
                     },
                     "import { init } from 'neatlogs';\nawait init();\n",
                 ),
@@ -527,7 +759,7 @@ def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
                         "go.mod": "module example.com/clean\n\ngo 1.25.0\n",
                         "main.go": "package main\n\nfunc main() {}\n",
                     },
-                    'package main\n\nimport neatlogs "github.com/neatlogs/neatlogs-go"\n\nvar _ = neatlogs.Version\n',
+                    "package main\n\nfunc main() {}\n",
                 ),
             }
             for stack, (skill_id, clean_files, instrumented_source) in clean_projects.items():
@@ -538,7 +770,7 @@ def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
                         source_name = next(
                             name
                             for name in files
-                            if name.endswith((".py", ".ts", ".go"))
+                            if name.endswith((".py", ".ts", ".mjs", ".go"))
                         )
                         if state == "already-instrumented":
                             files[source_name] = instrumented_source
@@ -580,6 +812,49 @@ def validate_release_assets(skill_names: set[str], errors: list[str]) -> None:
                             if actual != expected:
                                 errors.append(
                                     f"{stack} {state} Skill installation modified {relative}"
+                                )
+                        smoke_commands = {
+                            "python": [sys.executable, "app.py"],
+                            "node": ["node", "index.mjs"],
+                            "go": ["go", "test", "./..."],
+                        }
+                        command = smoke_commands[stack]
+                        if shutil.which(command[0]) is None:
+                            errors.append(
+                                f"{stack} release smoke requires {command[0]} on PATH"
+                            )
+                        else:
+                            if stack == "python" and state == "already-instrumented":
+                                (project / "neatlogs.py").write_text(
+                                    "initialized = False\n"
+                                    "def init():\n"
+                                    "    global initialized\n"
+                                    "    initialized = True\n",
+                                    encoding="utf-8",
+                                )
+                            if stack == "node" and state == "already-instrumented":
+                                module = project / "node_modules" / "neatlogs"
+                                module.mkdir(parents=True)
+                                (module / "package.json").write_text(
+                                    '{"name":"neatlogs","type":"module","exports":"./index.mjs"}\n',
+                                    encoding="utf-8",
+                                )
+                                (module / "index.mjs").write_text(
+                                    "export async function init() {}\n",
+                                    encoding="utf-8",
+                                )
+                            try:
+                                subprocess.run(
+                                    command,
+                                    cwd=project,
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30,
+                                )
+                            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                                errors.append(
+                                    f"{stack} {state} clean-project smoke failed: {exc}"
                                 )
     except (OSError, KeyError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
         errors.append(f"Skill release asset validation failed: {exc}")

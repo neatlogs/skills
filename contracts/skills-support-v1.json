@@ -5,7 +5,27 @@
     "contract_version": "2.0.0",
     "schema_version": 2,
     "schema_sha256": "9aec0e1b4e2fba718a1bad060798a881543c56ec8b887c6b0fb8ab147bbaee75",
-    "authority": "https://github.com/neatlogs/skills/tree/main/contracts/v2"
+    "authority": "https://github.com/neatlogs/skills/tree/skills-v1.3.0/contracts/v2"
+  },
+  "source_baselines": {
+    "python": {
+      "repository": "neatlogs/neatlogs",
+      "revision": "627820ca00016057a82dc87a447892383682d36a",
+      "manifest": "pyproject.toml",
+      "integration_registry": "neatlogs/instrumentation/registry.py"
+    },
+    "typescript": {
+      "repository": "neatlogs/neatlogs-typescript",
+      "revision": "dc850727ffe00e23759650b38150e4ff3e688301",
+      "manifest": "package.json",
+      "integration_registry": "package.json#exports"
+    },
+    "go": {
+      "repository": "neatlogs/neatlogs-go",
+      "revision": "8dc5a8839ded1ee9853a944b562065ca5104b0f2",
+      "manifest": "go.mod",
+      "integration_registry": "README.md"
+    }
   },
   "distribution": {
     "repository": "neatlogs/skills",
@@ -48,7 +68,9 @@
         "agno",
         "anthropic",
         "azure_ai_inference",
+        "azure_openai",
         "bedrock",
+        "claude_agent_sdk",
         "chromadb",
         "crewai",
         "dspy",
@@ -60,12 +82,42 @@
         "mcp",
         "openai",
         "openai_agents",
+        "openrouter",
         "pinecone",
         "pydantic_ai",
         "qdrant",
         "strands",
+        "vertex_ai",
+        "vertexai",
         "weaviate"
-      ]
+      ],
+      "integration_contracts": {
+        "agno": { "package": "agno", "version_range": ">=2.3.13", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "agno", "detected_ids": ["agno"] },
+        "anthropic": { "package": "anthropic", "version_range": ">=0.75.0", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "anthropic", "detected_ids": ["anthropic"] },
+        "azure_ai_inference": { "package": "azure-ai-inference", "api_contract": "ChatCompletionsClient.complete/stream", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "azure_ai_inference", "detected_ids": ["azure_ai_inference"] },
+        "azure_openai": { "package": "openai", "version_range": ">=1.0.0", "mechanism": "wrapper", "entrypoint": "neatlogs.wrap", "value": "AzureOpenAI", "detected_ids": ["openai"] },
+        "bedrock": { "package": "boto3", "version_range": ">=1.42.11", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "bedrock", "detected_ids": ["bedrock"] },
+        "claude_agent_sdk": { "package": "claude-agent-sdk", "api_contract": "query() async message stream", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "claude_agent_sdk", "detected_ids": ["claude-agent-sdk"] },
+        "chromadb": { "package": "chromadb", "version_range": ">=1.1.1", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "chromadb", "detected_ids": ["chromadb"] },
+        "crewai": { "package": "crewai", "version_range": ">=1.9.3", "mechanism": "wrapper", "entrypoint": "neatlogs.wrap", "value": "Crew", "detected_ids": ["crewai"] },
+        "dspy": { "package": "dspy", "version_range": ">=2.6.13", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "dspy", "detected_ids": ["dspy"] },
+        "google_adk": { "package": "google-adk", "version_range": ">=1.14.1", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "google_adk", "detected_ids": ["google-adk"] },
+        "google_genai": { "package": "google-genai", "version_range": ">=1.55.0", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "google_genai", "detected_ids": ["google-genai"] },
+        "hermes": { "package": "hermes-agent", "version_range": ">=0.15.1", "mechanism": "plugin-or-init-key", "entrypoint": "hermes plugins enable neatlogs", "value": "hermes", "detected_ids": ["hermes"] },
+        "langchain": { "package": "langchain-core", "version_range": ">=0.3.0", "mechanism": "callback", "entrypoint": "neatlogs.langchain_handler", "value": "langchain", "detected_ids": ["langchain", "langgraph"] },
+        "litellm": { "package": "litellm", "version_range": ">=1.80.11", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "litellm", "detected_ids": ["litellm"] },
+        "mcp": { "package": "mcp", "version_range": ">=1.0.0", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "mcp", "detected_ids": ["mcp"] },
+        "openai": { "package": "openai", "version_range": ">=1.0.0", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "openai", "detected_ids": ["openai"] },
+        "openai_agents": { "package": "openai-agents", "version_range": ">=0.6.5", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "openai_agents", "detected_ids": ["openai-agents"] },
+        "openrouter": { "package": "openrouter", "api_contract": "OpenRouter chat/responses/embeddings/rerank resources", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "openrouter", "detected_ids": ["openrouter"] },
+        "pinecone": { "package": "pinecone", "api_contract": "Index query/search API", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "pinecone", "detected_ids": ["pinecone"] },
+        "pydantic_ai": { "package": "pydantic-ai", "version_range": ">=0.0.9", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "pydantic_ai", "detected_ids": ["pydantic-ai"] },
+        "qdrant": { "package": "qdrant-client", "version_range": "<1.16", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "qdrant", "detected_ids": ["qdrant"] },
+        "strands": { "package": "strands-agents", "api_contract": "Strands Agent invocation hooks", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "strands", "detected_ids": ["strands"] },
+        "vertex_ai": { "package": "google-genai", "version_range": ">=1.55.0", "mechanism": "wrapper-or-init-key", "entrypoint": "neatlogs.wrap", "value": "vertex_ai", "detected_ids": ["google-genai", "vertexai"] },
+        "vertexai": { "package": "google-cloud-aiplatform", "version_range": ">=1.38.0", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "vertexai", "detected_ids": ["vertexai"] },
+        "weaviate": { "package": "weaviate-client", "api_contract": "collection/query API", "mechanism": "init-key", "entrypoint": "neatlogs.init", "value": "weaviate", "detected_ids": ["weaviate"] }
+      }
     },
     "typescript": {
       "runtime": {
@@ -95,6 +147,23 @@
         "vercel-ai",
         "vertex-ai"
       ],
+      "integration_contracts": {
+        "anthropic": { "package": "@anthropic-ai/sdk", "version_range": ">=0.68.0 <0.69.0", "mechanism": "wrapper", "entrypoint": "neatlogs/anthropic", "value": "wrapAnthropic", "detected_ids": ["anthropic"] },
+        "azure-openai": { "package": "openai", "version_range": ">=6.34.0 <6.35.0", "mechanism": "wrapper", "entrypoint": "neatlogs/azure-openai", "value": "wrapAzureOpenAI", "detected_ids": ["openai"] },
+        "bedrock": { "package": "@aws-sdk/client-bedrock-runtime", "api_contract": "AWS SDK v3 send(command) API", "mechanism": "wrapper", "entrypoint": "neatlogs/bedrock", "value": "wrapBedrock", "detected_ids": ["bedrock"] },
+        "browser": { "package": "neatlogs", "version_range": ">=1.1.19 <2.0.0", "mechanism": "client", "entrypoint": "neatlogs/browser", "value": "Neatlogs", "detected_ids": ["browser"] },
+        "claude-agent-sdk": { "package": "@anthropic-ai/claude-agent-sdk", "api_contract": "query() async message stream", "mechanism": "wrapper", "entrypoint": "neatlogs/claude-agent-sdk", "value": "wrapClaudeAgentSDK", "detected_ids": ["claude-agent-sdk"] },
+        "google-genai": { "package": "@google/genai", "version_range": ">=1.34.0 <1.35.0", "mechanism": "wrapper", "entrypoint": "neatlogs/google-genai", "value": "wrapGoogleGenAI", "detected_ids": ["google-genai"] },
+        "langchain": { "package": "@langchain/core", "version_range": ">=0.3.0 <0.4.0", "mechanism": "callback", "entrypoint": "neatlogs/langchain", "value": "langchainHandler", "detected_ids": ["langchain", "langgraph"] },
+        "mastra": { "package": "@mastra/core", "version_range": ">=1.32.0 <1.33.0", "mechanism": "wrapper", "entrypoint": "neatlogs/mastra", "value": "wrapMastra", "detected_ids": ["mastra"] },
+        "openai": { "package": "openai", "version_range": ">=6.34.0 <6.35.0", "mechanism": "wrapper", "entrypoint": "neatlogs/openai", "value": "wrapOpenAI", "detected_ids": ["openai"] },
+        "openai-agents": { "package": "@openai/agents", "api_contract": "addTraceProcessor() API", "mechanism": "processor", "entrypoint": "neatlogs/openai-agents", "value": "openaiAgentsProcessor", "detected_ids": ["openai-agents"] },
+        "opencode": { "package": "@opencode-ai/plugin", "api_contract": "current plugin hook API", "mechanism": "plugin", "entrypoint": "neatlogs/opencode", "value": "NeatlogsOpencodePlugin", "detected_ids": ["opencode"] },
+        "openrouter-agent": { "package": "@openrouter/agent", "version_range": ">=0.7.0 <0.8.0", "mechanism": "wrapper", "entrypoint": "neatlogs/openrouter-agent", "value": "wrapOpenRouterAgent", "detected_ids": ["openrouter"] },
+        "pi-agent": { "package": "@earendil-works/pi-agent-core", "alternative_packages": ["@mariozechner/pi-agent-core"], "version_range": ">=0.73.0 <0.74.0 || >=0.83.0 <0.84.0", "mechanism": "hooks", "entrypoint": "neatlogs/pi-agent", "value": "piAgentHooks", "detected_ids": ["pi-agent"] },
+        "vercel-ai": { "package": "ai", "version_range": ">=6.0.0 <7.0.0", "mechanism": "wrapper", "entrypoint": "neatlogs/ai", "value": "wrapAISDK", "detected_ids": ["vercel-ai"] },
+        "vertex-ai": { "package": "@google/genai", "version_range": ">=1.34.0 <1.35.0", "mechanism": "wrapper", "entrypoint": "neatlogs/vertex-ai", "value": "wrapVertexAI", "detected_ids": ["vertexai", "google-genai"] }
+      },
       "unsupported_surfaces": [
         "edge-runtime",
         "instrumentations-init-option",
@@ -116,6 +185,10 @@
         "google-genai",
         "explicit-span-helpers"
       ],
+      "integration_contracts": {
+        "google-genai": { "package": "google.golang.org/genai", "api_contract": "Client.Models.GenerateContent and stream API", "mechanism": "wrapper", "entrypoint": "github.com/neatlogs/neatlogs-go/contrib/genai", "value": "WrapGenAI", "detected_ids": ["google-genai"] },
+        "explicit-span-helpers": { "package": "github.com/neatlogs/neatlogs-go", "version_range": ">=0.1.7 <0.2.0", "mechanism": "span-helper", "entrypoint": "github.com/neatlogs/neatlogs-go", "value": "StartLLMSpan", "detected_ids": ["openai", "anthropic", "custom"] }
+      },
       "unsupported_surfaces": [
         "google-adk-global-provider"
       ]
@@ -125,11 +198,15 @@
       "integrations": [
         "http-json-v1-trace",
         "otlp-grpc-existing-otel"
-      ]
+      ],
+      "integration_contracts": {
+        "http-json-v1-trace": { "package": "none", "api_contract": "POST /v1/trace canonical JSON envelope", "mechanism": "http", "entrypoint": "https://ingest.neatlogs.com/v1/trace", "value": "POST", "detected_ids": ["direct-http"] },
+        "otlp-grpc-existing-otel": { "package": "opentelemetry", "api_contract": "OTLP/gRPC ExportTraceServiceRequest", "mechanism": "otlp-grpc", "entrypoint": "ingest.neatlogs.com:4317", "value": "Export", "detected_ids": ["otel"] }
+      }
     }
   },
   "skill_targets": {
-    "neatlogs-go": { "stack": "go", "integration": "google-genai" },
+    "neatlogs-go": { "stack": "go", "integration": "generic" },
     "neatlogs-ingest": { "stack": "direct-ingest", "integration": "http-json-v1-trace" },
     "neatlogs-multi-workflow": { "stack": "multi", "integration": "manual-workflow-boundary" },
     "neatlogs-py": { "stack": "python", "integration": "generic" },
@@ -139,7 +216,7 @@
     "neatlogs-py-google-adk": { "stack": "python", "integration": "google_adk" },
     "neatlogs-py-hermes": { "stack": "python", "integration": "hermes" },
     "neatlogs-py-langchain": { "stack": "python", "integration": "langchain" },
-    "neatlogs-py-openai": { "stack": "python", "integration": "openai" },
+    "neatlogs-py-openai": { "stack": "python", "integration": "generic" },
     "neatlogs-py-openai-agents": { "stack": "python", "integration": "openai_agents" },
     "neatlogs-py-pydantic-ai": { "stack": "python", "integration": "pydantic_ai" },
     "neatlogs-py-setup": { "stack": "python", "integration": "generic" },
@@ -147,7 +224,7 @@
     "neatlogs-ts": { "stack": "typescript", "integration": "generic" },
     "neatlogs-ts-langchain": { "stack": "typescript", "integration": "langchain" },
     "neatlogs-ts-mastra": { "stack": "typescript", "integration": "mastra" },
-    "neatlogs-ts-openai": { "stack": "typescript", "integration": "openai" },
+    "neatlogs-ts-openai": { "stack": "typescript", "integration": "generic" },
     "neatlogs-ts-pi-agent": { "stack": "typescript", "integration": "pi-agent" },
     "neatlogs-ts-vercel-ai": { "stack": "typescript", "integration": "vercel-ai" }
   },
@@ -156,6 +233,7 @@
     "SKILL_SUPPORT_CONTRACT_INVALID",
     "SKILL_VERSION_UNSUPPORTED",
     "WIZARD_VERSION_UNSUPPORTED",
+    "RUNTIME_VERSION_UNSUPPORTED",
     "SDK_VERSION_UNSUPPORTED",
     "INTEGRATION_UNSUPPORTED",
     "INSTRUMENTATION_AMBIGUOUS",

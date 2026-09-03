@@ -17,6 +17,7 @@ SKILLS = ROOT / "skills"
 PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
 SUPPORT = ROOT / "contracts" / "skills-support-v1.json"
 TELEMETRY_MANIFEST = ROOT / "contracts" / "v2" / "manifest.json"
+TELEMETRY_SCHEMA = ROOT / "contracts" / "v2" / "neatlogs-telemetry.schema.json"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
 
@@ -47,6 +48,7 @@ def build_archive(
     destination: Path,
     support_bytes: bytes,
     telemetry_manifest_bytes: bytes,
+    telemetry_schema_bytes: bytes,
 ) -> dict[str, object]:
     skill_id = skill_dir.name
     archive_path = destination / f"{skill_id}.zip"
@@ -63,6 +65,11 @@ def build_archive(
             archive,
             f"{skill_id}/.neatlogs/telemetry-v2-manifest.json",
             telemetry_manifest_bytes,
+        )
+        zip_entry(
+            archive,
+            f"{skill_id}/.neatlogs/neatlogs-telemetry.schema.json",
+            telemetry_schema_bytes,
         )
 
     archive_bytes = archive_path.read_bytes()
@@ -91,6 +98,7 @@ def build_release(destination: Path) -> dict[str, object]:
         raise ValueError("release output directory must be empty")
     support_bytes = SUPPORT.read_bytes()
     telemetry_manifest_bytes = TELEMETRY_MANIFEST.read_bytes()
+    telemetry_schema_bytes = TELEMETRY_SCHEMA.read_bytes()
     prefix = str(distribution["canonical_download_prefix"])
     entries: list[dict[str, object]] = []
     for skill_dir in sorted(path for path in SKILLS.iterdir() if path.is_dir()):
@@ -101,12 +109,18 @@ def build_release(destination: Path) -> dict[str, object]:
             destination,
             support_bytes,
             telemetry_manifest_bytes,
+            telemetry_schema_bytes,
         )
         entry["downloadUrl"] = f"{prefix}{entry['id']}.zip"
         entries.append(entry)
 
     support_asset = destination / str(distribution["support_contract_asset"])
     shutil.copyfile(SUPPORT, support_asset)
+    shutil.copyfile(TELEMETRY_MANIFEST, destination / "telemetry-v2-manifest.json")
+    shutil.copyfile(
+        TELEMETRY_SCHEMA,
+        destination / "neatlogs-telemetry.schema.json",
+    )
     support_digest = sha256(support_bytes)
     menu = {
         "formatVersion": "neatlogs.skill-menu/v1",

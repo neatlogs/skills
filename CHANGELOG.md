@@ -14,6 +14,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added the public `neatlogs.skills-support/v1` compatibility contract covering Skill, SDK, Wizard, telemetry-schema, integration, reason-code, and backend-diagnostic compatibility.
 - Added deterministic Skill archives with embedded public contracts, versioned canonical download URLs, SHA-256 digests, byte lengths, and a release checksum manifest.
 - Added a versioned compatibility gate to every public Skill: read-only detection before edits, fail-closed Doctor capability checks, public reason-code remediation, explicit approval, rollback, and idempotency requirements.
+- Added source-pinned package/import/mechanism metadata for every integration, including the current Python Azure OpenAI, Vertex, OpenRouter, and Claude Agent SDK wrappers.
+- Added clean Python, Node.js, and Go execution smokes plus an immutable, release-ordered publication gate.
 
 ### Fixed
 
@@ -21,6 +23,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Aligned TypeScript instrumentation guidance with the removed public registry: explicit wrappers, handlers, hooks, processors, and plugins are the only supported integration paths.
 - Replaced the misleading bundled-Wizard Doctor gate with truthful `DOCTOR_UNAVAILABLE` behavior until SDK Doctor v2 and correlated backend receipts are released.
 - Made automated edits fail closed, require a public allowlisted reason code plus user approval, and require rollback/idempotency checks.
+- Kept TypeScript Strands explicitly unsupported because its exported helper rejects at runtime.
 
 ## [1.2.4] - 2026-08-19
 
