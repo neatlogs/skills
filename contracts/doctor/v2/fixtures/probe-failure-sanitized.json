@@ -1,0 +1,26 @@
+{
+  "format_version": "neatlogs.doctor/v2",
+  "mode": "probe",
+  "status": "fail",
+  "first_failure": "BACKEND_PROBE_UNAVAILABLE",
+  "runtime": {
+    "language": "python",
+    "sdk_version": "1.4.21",
+    "schema_version": "2",
+    "transport": "otlp_http_protobuf"
+  },
+  "checks": [
+    {
+      "name": "probe_transport",
+      "status": "fail",
+      "reason_code": "BACKEND_PROBE_UNAVAILABLE",
+      "message": "The exact Doctor trace did not become readable before the deadline",
+      "remediation_code": "WAIT_FOR_TRACE",
+      "details": {
+        "readback_status": "not_visible",
+        "timeout_ms": 45000,
+        "retryable": true
+      }
+    }
+  ]
+}
