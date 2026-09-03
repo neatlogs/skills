@@ -4,8 +4,12 @@ on:
   push:
     paths:
       - 'skills/**'
+      - 'contracts/**'
       - '.claude-plugin/plugin.json'
       - '.claude-plugin/marketplace.json'
+      - 'CHANGELOG.md'
+      - 'requirements-ci.txt'
+      - 'scripts/validate-skills.py'
       - '.github/workflows/publish-skills.yml'
     branches:
       - main
@@ -13,6 +17,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: publish-skills
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -23,11 +31,32 @@ jobs:
       - name: Resolve release version
         id: release
         run: |
+          set -euo pipefail
           version=$(node -p "require('./.claude-plugin/plugin.json').version")
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=skills-v$version" >> "$GITHUB_OUTPUT"
           echo "Publishing skills version $version"
+
+      - name: Refuse release tag reuse
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "::error::Release tag ${RELEASE_TAG} already exists; bump the plugin version."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate release inputs
+        run: |
+          python -m pip install -r requirements-ci.txt
+          python scripts/validate-skills.py
+          python -m pytest -q
 
       - name: Package skills
         run: |
@@ -69,7 +98,7 @@ jobs:
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: Skills v${{ steps.release.outputs.version }}
-          body: Auto-published skill packages for the Neatlogs wizard
+          body: Auto-published NeatLogs skill packages for coding agents
           files: |
             skills/*.zip
             skills/skill-menu.json

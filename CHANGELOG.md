@@ -7,6 +7,23 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-09-03
+
+### Added
+
+- Added one installed-SDK Doctor v2 safety gate to every Python, TypeScript, and Go instrumentation skill.
+- Added the public Doctor v2 result schema, launch support manifest, and local/probe contract fixtures.
+- Added release validation for Doctor status semantics, safe primitive details, exact four-span probe results, and forward-compatible reason codes.
+
+### Fixed
+
+- Removed superseded Wizard Doctor v1 commands and stale diagnostic-control-plane guidance.
+- Replaced exact SDK patch allowlists with Doctor v2 capability checks that accept newer compatible releases and never downgrade an installation.
+- Decoupled the Skills launch contract from Wizard release versions.
+- Aligned success fixtures with SDK-emitted reason and remediation codes.
+- Added platform-aware project-local TypeScript commands and a version-matched Go CLI installation path.
+- Made skill publishing refuse an existing release tag instead of mutating a published version.
+
 ## [1.2.5] - 2026-09-03
 
 ### Fixed
@@ -56,7 +73,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...HEAD
+[1.2.6]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...skills-v1.2.6
 [1.2.5]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...skills-v1.2.5
 [1.2.4]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...skills-v1.2.4
 [1.2.3]: https://github.com/neatlogs/skills/compare/skills-v1.2.2...skills-v1.2.3
