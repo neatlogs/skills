@@ -23,17 +23,19 @@ Canonical docs: https://docs.neatlogs.com/sdk/multiple-workflows
 
 ## Completion gate
 
-Do not report success after editing files alone. Build the affected package or application, restart the real process, and exercise every changed workflow entry point. This skill does not grant platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
+Before running a build, test, restart, or workflow, show every command and
+obtain explicit user approval. Run the approved project checks, restart the
+process that loads the changed boundaries, and exercise each changed workflow
+entry point with safe representative input.
 
-Generate one process-marker UUID for each launched process and a distinct exercise-nonce UUID for every changed workflow entry point. Append `neatlogs.verification.marker=<marker UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries and scoping it only to the launched process; do not edit source or persistent configuration, and do not treat either value as a secret. Put each exact token `neatlogs-verification:<nonce UUID>` in a safe representative user request, prompt, or API argument for its workflow so it should be captured in a persisted span `input_value`. Record the current UTC timestamp before the exercises. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with the temporary marker and which nonce token to submit for each workflow. If any path cannot safely carry a unique captured input, report that blocker and leave its verification incomplete.
-
-After the exercises finish, flush telemetry and gracefully stop the marked process or relaunch it without the marker before discovery. If marked trace production cannot be quiesced, leave verification incomplete. Call the already-connected Neatlogs platform MCP with `get_trace_context(verification_marker=<marker UUID>, candidate_offset=0)`. Enumerate offsets from 0 upward, collecting distinct trace IDs until MCP returns `No project trace found` for the next offset. Page every candidate completely with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null. Match a candidate to a workflow only when exactly that workflow's nonce appears in a persisted span `input_value`, its top-level `name` and `workflow` plus parentless root span match the exercised entry point, its `created_at` is not earlier than the recorded timestamp, `root_span_count` is 1, and no span has `synthetic_recovery_root: true`. Never select the first or latest marker match. If no workflow trace qualifies yet, poll every 5 seconds and repeat the full enumeration for up to 2 minutes. Restart a scan if offsets shift and duplicate a trace ID; if a complete distinct scan cannot be obtained, offset 100 still returns a candidate, any nonce matches zero or multiple traces, or one trace matches multiple workflow nonces, report the ambiguity and leave verification incomplete.
-
-For each uniquely matched trace, poll its exact `trace_id` every 5 seconds for up to 2 minutes while `status` is `processing` or `finalization_status` is `pending`. If any trace does not reach `finalized` within that bound, leave verification incomplete. Treat a null or unrecognized `finalization_status` as a hosted-contract blocker. After all are `finalized`, require `trace_context_contract_version: 2`, `verification_ready: true`, `span_payload_complete: true`, `span_tree_complete: true`, and `root_span_count: 1` on each trace; otherwise report a hosted-contract or incomplete-payload blocker. Page every span again and perform two identical full marker-candidate enumerations at least 10 seconds apart to confirm the same one-to-one nonce/trace mapping in both scans. Verify that all `span_count` spans in every matched trace were inspected.
-
-If `get_trace_context` rejects `verification_marker`, `candidate_offset`, `trace_id`, or `offset`, or omits `trace_context_contract_version`, `verification_ready`, `span_payload_complete`, `span_tree_complete`, `root_span_count`, `trace_id`, `name`, `workflow`, `created_at`, `spans[].parent_span_id`, `spans[].input_value`, `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query. If MCP is unavailable, ask the user to configure `https://ingest.neatlogs.com/mcp` with the project key stored as a client secret; never print or request the key in chat.
-
-Inspect each full persisted span tree, top-level `workflow`, and parentless root span, not only a trace-list summary or local debug output. Confirm every fresh trace is assigned to the intended workflow. If any workflow cannot be built, restarted, run, or verified, state that the instrumentation is incomplete and identify the exact blocker.
+Through the target project's normal product trace view or supported public read
+path, verify the exact finalized trace for each run. Every workflow must have
+one meaningful root, its intended top-level workflow label and hierarchy, and
+no duplicate operation spans. Do not use a legacy marker-discovery protocol or
+infer success from installation, local logs, exporter flush, or HTTP
+acceptance. Keep credentials out of commands, output, files, and agent context.
+If any exact trace cannot be inspected, report that workflow's blocker and
+leave it incomplete.
 
 ---
 
