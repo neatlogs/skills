@@ -51,11 +51,11 @@ EXPECTED_DIALECT_ORDER = [
 EXPECTED_SOURCE_BASELINES = {
     "python": (
         "neatlogs/neatlogs",
-        "627820ca00016057a82dc87a447892383682d36a",
+        "96ffcf4dc72b78e19e30daef4947fd65b6f455c4",
     ),
     "typescript": (
         "neatlogs/neatlogs-typescript",
-        "dc850727ffe00e23759650b38150e4ff3e688301",
+        "39d3354b03535f532990007e09da6fb51167e70f",
     ),
     "go": (
         "neatlogs/neatlogs-go",

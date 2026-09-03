@@ -10,13 +10,13 @@
   "source_baselines": {
     "python": {
       "repository": "neatlogs/neatlogs",
-      "revision": "627820ca00016057a82dc87a447892383682d36a",
+      "revision": "96ffcf4dc72b78e19e30daef4947fd65b6f455c4",
       "manifest": "pyproject.toml",
       "integration_registry": "neatlogs/instrumentation/registry.py"
     },
     "typescript": {
       "repository": "neatlogs/neatlogs-typescript",
-      "revision": "dc850727ffe00e23759650b38150e4ff3e688301",
+      "revision": "39d3354b03535f532990007e09da6fb51167e70f",
       "manifest": "package.json",
       "integration_registry": "package.json#exports"
     },
