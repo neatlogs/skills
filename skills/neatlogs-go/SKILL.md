@@ -135,36 +135,111 @@ empty retriever result is recorded as `"[]"`, not omitted).
 `StartRetrieverSpan` emits the canonical `neatlogs.retriever.*` namespace;
 never emit the legacy `neatlogs.retrieval.*` spelling from new code.
 
-## Live completion gate (wizard or standalone coding agent)
+## Safety gate
 
-Show concise, secret-free progress for install, edits, checks/build, process
-restart, runtime exercise, and platform confirmation. This skill does not grant
-platform access. The marker-aware `get_trace_context` contract must be deployed on the hosted Neatlogs backend, and the installed SDK or exporter must preserve the resource marker; merged source changes or an updated local wizard alone are not proof.
+Before any edit, confirm this service is Go. Identify the Go package manager
+and toolchain from `go.mod`, `go.work`, and `go.sum`. Resolve the installed
+SDK module version without changing dependencies:
 
-For the representative run, generate two distinct UUIDs: a process marker and an exercise nonce. Append `neatlogs.verification.marker=<marker UUID>` to `OTEL_RESOURCE_ATTRIBUTES`, preserving existing entries and scoping it only to the launched process; do not edit source or persistent configuration, and do not treat either value as a secret. Put the exact token `neatlogs-verification:<nonce UUID>` in a safe representative user request, prompt, or API argument that exercises the real path and should be captured in a persisted span `input_value`. Immediately before the exercise, record the current UTC timestamp. If the coding agent cannot launch a web UI path, tell the user exactly how to start the app with the temporary marker and which nonce token to submit. If the path cannot safely carry a unique captured input, report that blocker and leave verification incomplete.
+```bash
+go list -m -f '{{.Version}}' github.com/neatlogs/neatlogs-go
+```
 
-After the exercised request finishes, flush telemetry and gracefully stop the marked process or relaunch it without the marker before discovery. If marked trace production cannot be quiesced, leave verification incomplete. Then call the already-connected Neatlogs platform MCP with `get_trace_context(verification_marker=<marker UUID>, candidate_offset=0)`. Enumerate offsets from 0 upward, collecting distinct trace IDs until MCP returns `No project trace found` for the next offset. For every candidate, page its complete span set with `get_trace_context(trace_id=<trace_id>, offset=<next_offset>)` until `next_offset` is null. A candidate qualifies only when the exact nonce token appears in a persisted span `input_value`, its top-level `name` and `workflow` plus parentless root span match the exercised path, its `created_at` is not earlier than the recorded timestamp, `root_span_count` is 1, and no span has `synthetic_recovery_root: true`. Never select the first or latest marker match. If no trace qualifies yet, poll every 5 seconds and repeat the full enumeration for up to 2 minutes. Restart a scan if offsets shift and duplicate a trace ID; if a complete distinct scan cannot be obtained, offset 100 still returns a candidate, or zero or multiple traces qualify, report the ambiguity and leave verification incomplete.
+A Go module dependency does not install its CLI. If the `neatlogs` binary is
+missing, check the canonical module tags for the latest published stable
+release. If the project uses an older release that lacks Doctor v2, show the
+exact module-upgrade command and obtain explicit user approval before running
+it. Accept newer compatible releases and never downgrade one. After resolving
+the project module version, replace `<resolved-module-version>` below with that
+exact value. Show the command and obtain separate explicit user approval:
 
-Once exactly one trace qualifies, poll that exact `trace_id` every 5 seconds for up to 2 minutes while `status` is `processing` or `finalization_status` is `pending`. If it does not reach `finalized` within that bound, leave verification incomplete. Treat a null or unrecognized `finalization_status` as a hosted-contract blocker. After `finalization_status` is `finalized`, require `trace_context_contract_version: 2`, `verification_ready: true`, `span_payload_complete: true`, `span_tree_complete: true`, and `root_span_count: 1`; otherwise report a hosted-contract or incomplete-payload blocker. Page all spans again and perform two identical full marker-candidate enumerations at least 10 seconds apart to confirm that exactly one trace contains the nonce in both scans. Verify that all `span_count` spans were inspected.
+```bash
+go install github.com/neatlogs/neatlogs-go/cmd/neatlogs@<resolved-module-version>
+```
 
-If `get_trace_context` rejects `verification_marker`, `candidate_offset`, `trace_id`, or `offset`, or omits `trace_context_contract_version`, `verification_ready`, `span_payload_complete`, `span_tree_complete`, `root_span_count`, `trace_id`, `name`, `workflow`, `created_at`, `spans[].parent_span_id`, `spans[].input_value`, `status`, `finalization_status`, `next_offset`, or `span_count`, treat the hosted MCP as an old contract: stop, report the hosted deployment blocker, and do not claim verification or use another trace query.
+Do not substitute `go run`, `@latest`, `npx`, a Wizard command, or an
+unversioned download. The approved `go install` command must use the same
+version as the project module. Then run the installed Doctor binary:
 
-If platform MCP is unavailable, ask the user to connect it through their coding
-agent using the Neatlogs MCP server (`https://ingest.neatlogs.com/mcp`) or the
-`npx @neatlogs/wizard mcp --api-key <PROJECT_KEY>` command. The project key must
-go through the client's secret configuration; never print it or ask the user to
-paste it into chat. If access cannot be established, leave verification
-incomplete rather than claiming success.
+```bash
+neatlogs doctor --local --json
+```
 
-Do not report success until all of these are true:
+Local mode must be read-only and network-free. It requires no credential and
+must not change source or configuration. Require `format_version:
+"neatlogs.doctor/v2"`, `runtime.language: "go"`, and
+`runtime.schema_version: "2"`. Require that the binary and project module
+versions match. Treat `runtime.sdk_version` as identity evidence, not as an
+exact-version allowlist.
 
-1. The project checks and build pass.
-2. The process that loads `Init` and the wrapper/helpers has been restarted.
-3. The real user path has been exercised, not just a synthetic import check.
-4. The nonce-qualified project trace is the fresh run. Its full persisted span tree and
-   attributes show exactly one canonical span per operation and no duplicate
-   LLM span; a trace-list summary is not enough.
+If the command is missing or its result has the wrong format, language, schema,
+or module identity, fail closed. If the installed release is already the latest
+published stable release but lacks Doctor v2, stop and give safe manual/support
+remediation. Rerun local Doctor after an approved upgrade or CLI installation.
+Do not edit while this gate is unresolved.
 
-An offline or `DisableExport: true` check is useful for diagnosis but is not
-proof that ingestion works. If any step cannot be completed, report the exact
-command, observation, and blocker; leave the setup explicitly incomplete.
+A local `pass` proves only that the installed SDK produced and validated its
+controlled in-process envelope. It does not prove that the application is
+instrumented, that anything was exported, or that a hosted trace is visible.
+Preserve every `reason_code` and `remediation_code` exactly. Treat a warning,
+failure, or unknown future code as manual/support remediation unless the code is
+explicitly safe/fixable here. The only source fixes allowed by this gate are:
+
+- `INSTRUMENTOR_INACTIVE`: apply only this skill's documented initialization or
+  wrapper/helper step.
+- `ROOT_MISSING`: add only the already-requested, documented workflow boundary
+  at a confirmed entry point.
+- `ROOT_NOT_ENDED`: add only this skill's documented lifecycle hook.
+
+Do not edit for credential, authentication, transport, backend, ambiguous
+ownership, or unknown codes. Never reproduce backend PII, routing, mapping, or
+finalization implementation. Before any build, test, or user-workflow command,
+show the exact command and obtain explicit user approval. Make reruns idempotent:
+reread the target first and never duplicate initialization, wrappers, roots, or
+shutdown hooks. Keep a pre-edit diff. If an approved check fails, use the
+rollback plan to revert only the edits from this run when they can be isolated
+safely. Otherwise, stop and give manual recovery instructions that preserve
+unrelated user work.
+
+After instrumentation, obtain approval for the project checks and one
+representative real workflow. Obtain separate approval for the authenticated
+probe. Use only a credential already supplied through the process environment.
+Never print it, place it in command arguments or files, copy it into output, or
+put it in agent context.
+
+```bash
+neatlogs doctor --probe --json
+```
+
+Probe mode sends one controlled four-span trace through `POST /v1/traces` with
+`x-neatlogs-doctor: v1`, then reads that exact trace through
+`GET /api/traces/v3/{trace_id}` with the same project credential. Accept a
+probe `pass` only when capture and readback trace IDs match, the trace is
+finalized, exactly four spans contain one meaningful WORKFLOW root with
+AGENT→LLM and root→TOOL relationships, there are no duplicates, required
+semantics and I/O are present, and token values remain numeric. Never infer
+success from installation, local logs, exporter flush, HTTP 2xx, or any
+uncorrelated trace. Probe success proves the controlled path only. Verify the
+real user workflow separately through the completion gate below.
+
+## Completion gate
+
+After local Doctor passes and the requested instrumentation is in place:
+
+1. Show the exact project build, test, and real-workflow commands and obtain
+   explicit user approval before running them.
+2. Run only the approved checks. Restart a long-running process so it loads the
+   new initialization and wrappers; keep reruns idempotent.
+3. Exercise one representative real user workflow. End every opened span and
+   use the documented flush/shutdown lifecycle for that process type.
+4. Through the target project's normal product trace view or supported public
+   read path, verify that exact run is finalized, has one meaningful root and
+   the expected semantic hierarchy, and contains no duplicate operation spans.
+
+Keep project credentials in the process environment or client secret storage;
+never put them in commands, output, files, or agent context. Do not use a
+legacy marker-discovery protocol. Installation, local logs, exporter flush,
+HTTP 2xx, a local Doctor pass, and a separate probe pass are not proof that the
+application's real workflow is correct. If the exact user trace cannot be
+inspected, report the missing access or observation as a blocker and provide
+rollback/manual recovery instructions without claiming completion.

@@ -1,0 +1,62 @@
+{
+  "format_version": "neatlogs.launch-support/v1",
+  "doctor_contract": "neatlogs.doctor/v2",
+  "doctor_schema": "doctor/v2/neatlogs-doctor.schema.json",
+  "doctor_schema_sha256": "e415d448f73eb6e8a2967b0379aa4d995d9087f83d0ad2e1a1c8e7295ee37c26",
+  "skills_version": "1.2.6",
+  "sdks": {
+    "python": {
+      "package": "neatlogs",
+      "version_policy": "latest_published_stable",
+      "compatibility": "accept_newer_compatible_releases",
+      "never_downgrade": true,
+      "doctor_capability": {
+        "format_version": "neatlogs.doctor/v2",
+        "runtime_language": "python",
+        "schema_version": "2"
+      },
+      "transport": "otlp_http_protobuf"
+    },
+    "typescript": {
+      "package": "neatlogs",
+      "version_policy": "latest_published_stable",
+      "compatibility": "accept_newer_compatible_releases",
+      "never_downgrade": true,
+      "doctor_capability": {
+        "format_version": "neatlogs.doctor/v2",
+        "runtime_language": "typescript",
+        "schema_version": "2"
+      },
+      "transport": "otlp_http_protobuf"
+    },
+    "go": {
+      "package": "github.com/neatlogs/neatlogs-go",
+      "version_policy": "latest_published_stable",
+      "compatibility": "accept_newer_compatible_releases",
+      "never_downgrade": true,
+      "doctor_capability": {
+        "format_version": "neatlogs.doctor/v2",
+        "runtime_language": "go",
+        "schema_version": "2"
+      },
+      "transport": "otlp_http_protobuf"
+    }
+  },
+  "doctor_transport": {
+    "ingest_route": "/v1/traces",
+    "read_route": "/api/traces/v3/{trace_id}",
+    "marker_header": "x-neatlogs-doctor",
+    "marker_value": "v1"
+  },
+  "integration_classes": [
+    "automatic",
+    "wrapper",
+    "unsupported"
+  ],
+  "unsupported_version_behavior": {
+    "mode": "fail_closed",
+    "action": "upgrade_to_latest_published_stable_and_rerun_local_doctor",
+    "when_latest_lacks_capability": "manual_or_support_remediation",
+    "preserve_newer_compatible_versions": true
+  }
+}

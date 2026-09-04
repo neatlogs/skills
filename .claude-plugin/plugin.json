@@ -1,7 +1,7 @@
 {
   "name": "neatlogs",
   "description": "Instrument LLM applications with the neatlogs SDK — tracing, semantic spans, supported wrappers and framework integrations for OpenAI, Anthropic, LangChain, CrewAI, and more.",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "author": {
     "name": "NeatLogs",
     "email": "neatlogs-support@neatlogs.com"

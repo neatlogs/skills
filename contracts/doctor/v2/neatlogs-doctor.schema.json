@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.neatlogs.com/doctor/v2/neatlogs-doctor.schema.json",
+  "title": "NeatLogs SDK Doctor v2 result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "mode",
+    "status",
+    "first_failure",
+    "runtime",
+    "checks"
+  ],
+  "properties": {
+    "format_version": { "const": "neatlogs.doctor/v2" },
+    "mode": { "enum": ["local", "probe"] },
+    "status": { "enum": ["pass", "warn", "fail"] },
+    "first_failure": {
+      "oneOf": [
+        { "$ref": "#/$defs/reasonCode" },
+        { "type": "null" }
+      ]
+    },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "capture": { "$ref": "#/$defs/capture" },
+    "sampling": { "$ref": "#/$defs/sampling" },
+    "ownership": { "$ref": "#/$defs/ownership" },
+    "queue": { "$ref": "#/$defs/queue" },
+    "retry": { "$ref": "#/$defs/retry" },
+    "flush": { "$ref": "#/$defs/flush" },
+    "probe": { "$ref": "#/$defs/probe" },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/check" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "pass" } } },
+      "then": {
+        "properties": {
+          "first_failure": { "type": "null" },
+          "capture": {
+            "properties": {
+              "root_span_id": { "$ref": "#/$defs/spanId" },
+              "span_count": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "flush": {
+            "properties": { "outcome": { "const": "success" } }
+          },
+          "checks": {
+            "not": {
+              "contains": {
+                "properties": { "status": { "enum": ["warn", "fail"] } },
+                "required": ["status"]
+              }
+            }
+          }
+        },
+        "required": ["capture", "flush"]
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "warn" } } },
+      "then": {
+        "properties": {
+          "first_failure": { "type": "null" },
+          "checks": {
+            "contains": {
+              "properties": { "status": { "const": "warn" } },
+              "required": ["status"]
+            },
+            "not": {
+              "contains": {
+                "properties": { "status": { "const": "fail" } },
+                "required": ["status"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "fail" } } },
+      "then": {
+        "properties": {
+          "first_failure": { "$ref": "#/$defs/reasonCode" },
+          "checks": {
+            "contains": {
+              "properties": { "status": { "const": "fail" } },
+              "required": ["status"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": { "const": "probe" },
+          "status": { "const": "pass" }
+        },
+        "required": ["mode", "status"]
+      },
+      "then": {
+        "required": ["probe"],
+        "properties": {
+          "runtime": {
+            "properties": { "transport": { "const": "otlp_http_protobuf" } }
+          },
+          "capture": {
+            "properties": { "span_count": { "const": 4 } }
+          },
+          "probe": {
+            "properties": {
+              "visible": { "const": true },
+              "finalized": { "const": true },
+              "readback_span_count": { "const": 4 },
+              "meaningful_root_count": { "const": 1 },
+              "duplicate_span_count": { "const": 0 },
+              "hierarchy_valid": { "const": true },
+              "attributes_valid": { "const": true },
+              "input_output_valid": { "const": true },
+              "metadata_valid": { "const": true },
+              "typed_tokens_valid": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "reasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+    },
+    "traceId": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "spanId": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language", "sdk_version", "schema_version", "transport"],
+      "properties": {
+        "language": { "enum": ["python", "typescript", "go"] },
+        "sdk_version": { "type": "string", "minLength": 1 },
+        "schema_version": { "const": "2" },
+        "transport": { "enum": ["otlp_http_protobuf", "otlp_grpc"] }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_id", "root_span_id", "span_count", "semantic_digest"],
+      "properties": {
+        "trace_id": { "$ref": "#/$defs/traceId" },
+        "root_span_id": {
+          "oneOf": [
+            { "$ref": "#/$defs/spanId" },
+            { "type": "null" }
+          ]
+        },
+        "span_count": { "type": "integer", "minimum": 0 },
+        "semantic_digest": { "$ref": "#/$defs/digest" },
+        "wire_digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "sampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["effective_sampler", "root_sample_rate", "sampled"],
+      "properties": {
+        "effective_sampler": { "type": "string", "minLength": 1 },
+        "root_sample_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sampled": { "type": "boolean" }
+      }
+    },
+    "ownership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "instrumentor_count"],
+      "properties": {
+        "provider": { "enum": ["private", "external", "ambiguous", "none"] },
+        "instrumentor_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "pending_spans", "dropped_spans", "capacity"],
+      "properties": {
+        "mode": { "enum": ["simple", "batch", "diagnostic_capture", "unknown"] },
+        "pending_spans": { "type": "integer", "minimum": 0 },
+        "dropped_spans": { "type": "integer", "minimum": 0 },
+        "capacity": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attempts", "window_ms", "exhausted"],
+      "properties": {
+        "attempts": { "type": "integer", "minimum": 0 },
+        "window_ms": { "type": "integer", "minimum": 0 },
+        "exhausted": { "type": "boolean" }
+      }
+    },
+    "flush": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "timeout_ms", "duration_ms"],
+      "properties": {
+        "outcome": { "enum": ["not_attempted", "success", "timeout", "failed"] },
+        "timeout_ms": { "type": "integer", "minimum": 0 },
+        "duration_ms": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ingest_route",
+        "marker_header",
+        "marker_version",
+        "visible",
+        "readback_trace_id",
+        "finalized",
+        "readback_span_count",
+        "meaningful_root_count",
+        "duplicate_span_count",
+        "hierarchy_valid",
+        "attributes_valid",
+        "input_output_valid",
+        "metadata_valid",
+        "typed_tokens_valid"
+      ],
+      "properties": {
+        "ingest_route": { "const": "/v1/traces" },
+        "marker_header": { "const": "x-neatlogs-doctor" },
+        "marker_version": { "const": "v1" },
+        "visible": { "type": "boolean" },
+        "readback_trace_id": { "$ref": "#/$defs/traceId" },
+        "finalized": { "type": "boolean" },
+        "readback_span_count": { "type": "integer", "minimum": 0 },
+        "meaningful_root_count": { "type": "integer", "minimum": 0 },
+        "duplicate_span_count": { "type": "integer", "minimum": 0 },
+        "hierarchy_valid": { "type": "boolean" },
+        "attributes_valid": { "type": "boolean" },
+        "input_output_valid": { "type": "boolean" },
+        "metadata_valid": { "type": "boolean" },
+        "typed_tokens_valid": { "type": "boolean" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "reason_code", "message", "remediation_code"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["pass", "warn", "fail", "unknown"] },
+        "reason_code": { "$ref": "#/$defs/reasonCode" },
+        "message": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "remediation_code": { "$ref": "#/$defs/reasonCode" },
+        "details": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_]{0,63}$" },
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string", "maxLength": 512 },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "format_version": "neatlogs.doctor/v2",
+  "mode": "probe",
+  "status": "pass",
+  "first_failure": null,
+  "runtime": {
+    "language": "go",
+    "sdk_version": "0.1.7",
+    "schema_version": "2",
+    "transport": "otlp_http_protobuf"
+  },
+  "capture": {
+    "trace_id": "22222222222222222222222222222222",
+    "root_span_id": "2222222222222222",
+    "span_count": 4,
+    "semantic_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "flush": {
+    "outcome": "success",
+    "timeout_ms": 5000,
+    "duration_ms": 18
+  },
+  "probe": {
+    "ingest_route": "/v1/traces",
+    "marker_header": "x-neatlogs-doctor",
+    "marker_version": "v1",
+    "visible": true,
+    "readback_trace_id": "22222222222222222222222222222222",
+    "finalized": true,
+    "readback_span_count": 4,
+    "meaningful_root_count": 1,
+    "duplicate_span_count": 0,
+    "hierarchy_valid": true,
+    "attributes_valid": true,
+    "input_output_valid": true,
+    "metadata_valid": true,
+    "typed_tokens_valid": true
+  },
+  "checks": [
+    {
+      "name": "probe_readback",
+      "status": "pass",
+      "reason_code": "HIERARCHY_VALID",
+      "message": "The persisted four-span hierarchy is valid",
+      "remediation_code": "NONE"
+    },
+    {
+      "name": "probe_typed_tokens",
+      "status": "pass",
+      "reason_code": "TYPED_TOKENS_VALID",
+      "message": "The persisted token values remain numeric",
+      "remediation_code": "NONE",
+      "details": {
+        "prompt_tokens": 11,
+        "completion_tokens": 7,
+        "total_tokens": 18
+      }
+    }
+  ]
+}

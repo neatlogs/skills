@@ -1,0 +1,21 @@
+{
+  "format_version": "neatlogs.doctor/v2",
+  "mode": "local",
+  "status": "warn",
+  "first_failure": null,
+  "runtime": {
+    "language": "typescript",
+    "sdk_version": "1.1.19",
+    "schema_version": "2",
+    "transport": "otlp_http_protobuf"
+  },
+  "checks": [
+    {
+      "name": "ownership",
+      "status": "warn",
+      "reason_code": "PROJECT_OWNERSHIP_AMBIGUOUS",
+      "message": "More than one capture owner may be active",
+      "remediation_code": "REVIEW_CAPTURE_OWNER"
+    }
+  ]
+}
