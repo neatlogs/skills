@@ -10,7 +10,7 @@ Framework-specific integration patterns for the NeatLogs TypeScript SDK. Covers 
 
 ### 1a. Wrapper Only
 
-For applications that call LLM providers directly. Wrap the client; its calls are traced and a `WORKFLOW` root opens automatically.
+For applications that call LLM providers directly. Wrap the client; its calls are traced and a parentless `LLM` becomes the trace root. Non-root provider operations receive one automatic `WORKFLOW` parent.
 
 ```typescript
 import { init, wrapOpenAI } from 'neatlogs';
@@ -51,7 +51,7 @@ Do not wrap provider/framework calls in `trace({ kind: 'LLM' })` after applying 
 - **Wrapper**: `wrapOpenAI(client)` from `neatlogs` (or `neatlogs/openai`)
 - **Import order**: irrelevant — the wrapper patches the instance
 - **Supports**: sync, async (`AsyncOpenAI`-style usage), streaming
-- **Auto-roots**: yes — a lone wrapped call opens its own `WORKFLOW` root
+- **Root behavior**: a lone LLM call is the root; a standalone non-root operation receives one `WORKFLOW` parent
 
 ```typescript
 import { init, wrapOpenAI, span, flush, shutdown } from 'neatlogs';

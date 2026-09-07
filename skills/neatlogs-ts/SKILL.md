@@ -273,7 +273,7 @@ span({ kind: 'WORKFLOW', sessionId: 'conv_123', endUserId: 'u_456', endUserMetad
 
 // 3. Wrapper-only code (no root of your own — you only call neatlogs.wrap(...))
 await identify({ sessionId: 'conv_123', endUserId: 'u_456', endUserMetadata: { plan: 'pro' } }, async () => {
-  await client.chat.completions.create(/* ... */); // the wrapper's auto-root inherits the identity (framework wrappers too, on recent versions)
+  await client.chat.completions.create(/* ... */); // the LLM root inherits the identity
 });
 ```
 
@@ -317,7 +317,7 @@ namespace. `neatlogs.retrieval.*` is an ingestion-only legacy alias.
 | Strands / Pi agents | `strandsHooks(agent)` / `piAgentHooks(agent)` | `neatlogs` |
 | OpenCode | `NeatlogsOpencodePlugin` | `neatlogs/opencode` |
 
-The direct provider wrappers (`wrapOpenAI`, `wrapAnthropic`, `wrapAzureOpenAI`, `wrapBedrock`, `wrapGoogleGenAI`, `wrapVertexAI`, `wrapOpenRouterAgent`) also **auto-open a `WORKFLOW` root** when a call would otherwise be parentless, so a lone wrapped call renders on its own. Framework helpers root themselves.
+The direct provider wrappers (`wrapOpenAI`, `wrapAnthropic`, `wrapAzureOpenAI`, `wrapBedrock`, `wrapGoogleGenAI`, `wrapVertexAI`, `wrapOpenRouterAgent`) keep a parentless `LLM` as the trace root. A standalone non-root provider or manual operation receives one automatic `WORKFLOW` parent. Framework helpers root themselves.
 
 ### Why the instrumentations key was removed
 

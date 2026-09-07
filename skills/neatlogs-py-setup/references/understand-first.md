@@ -58,7 +58,7 @@ Trace each entry point's call graph: does any path from it reach a model/agent/t
 
 ## FIRST TRACE FAST — instrument one complete path first, then the rest
 
-Your FIRST goal is to get ONE proper trace to the platform as quickly as possible (like PostHog lands a first event in minutes), THEN broaden to full coverage. A "proper" first trace = a WORKFLOW root with at least its LLM call nested under it (NOT an orphan LLM span — those get dropped). So:
+Your FIRST goal is to get ONE proper trace to the platform as quickly as possible (like PostHog lands a first event in minutes), THEN broaden to full coverage. A parentless `LLM` is a valid single-call trace. For a multi-step feature, use a meaningful `WORKFLOW` root with its LLM and other operations nested beneath it. So:
 
 1. From the inventory, pick the SIMPLEST high-value feature — ideally a NON-streaming request→LLM→response path (e.g. a `generate_*` / `analyze_*` route), the one with the fewest moving parts.
 2. Instrument THAT path end-to-end FIRST: init() + the feature's WORKFLOW root + its LLM call (+ wrap the client). Make it compile.

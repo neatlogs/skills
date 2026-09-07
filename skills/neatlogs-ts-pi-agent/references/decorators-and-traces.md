@@ -388,7 +388,7 @@ Use `span()` to represent real custom orchestration. Call `piAgentHooks`-owned o
 
 ## 6. Custom Span Attributes via `trace()`
 
-Manual non-root kinds must run below a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. Supported wrappers self-root, but `trace({ kind: 'LLM'|'RERANKER'|'VECTOR_STORE'|... })` does not.
+`LLM` is root-eligible. Current manual APIs add one `WORKFLOW` parent when another semantic kind would otherwise be parentless; nested calls keep their real parent. Add an explicit root when several operations belong to one run, not merely to make one operation render.
 
 Manual spans must use these exact canonical keys:
 
@@ -482,6 +482,6 @@ async function rawLlmCall(prompt: string) {
 }
 ```
 
-> **Important**: `neatlogs.internal = false` makes the manual LLM span user-visible, but it does not make an LLM root eligible for finalization. Keep the explicit orchestration root unless one is already active.
+> **Important**: a parentless LLM is already root-eligible. Set `neatlogs.internal = false` when this manually owned LLM is nested under an explicit root so legacy wrapper deduplication does not treat it as a redundant helper span. Never add this manual span around a call already owned by a supported wrapper.
 
 > **Streaming raw HTTP** can't use the `trace()` callback (it closes the span when the callback returns, but a stream yields over time). Use the manual lifecycle guidance and per-provider field paths in **`neatlogs-ts/references/raw-http-llm.md`**.

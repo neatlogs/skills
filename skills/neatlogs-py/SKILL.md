@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
 This produces `WORKFLOW → AGENT → LLM`. The wrapper owns the single canonical LLM span; no manual LLM decorator is added.
 
-> **On the `@span(kind="WORKFLOW")` root:** auto-instrumentation and `wrap()` now open a `WORKFLOW` root automatically, so a single instrumented LLM call renders on its own — the decorator is **not** required just to make a trace appear. Add `@span(kind="WORKFLOW")` (or `AGENT`/`CHAIN`) when the function owns a real request, job, agent loop, or pipeline stage with meaningful pre/post work or multiple captured children, as in this multi-step example. If a root is already active, the automatic one steps aside (no double root).
+> **On the `@span(kind="WORKFLOW")` root:** a single parentless LLM call is already root-eligible, so the decorator is **not** required just to make a trace appear. Standalone non-root manual operations receive one automatic workflow parent. Add `@span(kind="WORKFLOW")` (or `AGENT`/`CHAIN`) when the function owns a real request, job, agent loop, or pipeline stage with meaningful pre/post work or multiple captured children, as in this multi-step example. If a root is already active, automatic rooting steps aside (no double root).
 
 ---
 
@@ -101,7 +101,7 @@ This produces `WORKFLOW → AGENT → LLM`. The wrapper owns the single canonica
 
 For server applications, call `neatlogs.init()` **once at startup** and flush/shutdown **once at shutdown**. Spans batch automatically every `flush_interval` (default 5 s) — do not call `flush()` / `shutdown()` per request.
 
-Decorate each AI endpoint handler with `@span(kind="WORKFLOW")` so the whole request (its LLM calls, tools, and your own steps) groups under one root per request. A lone instrumented LLM call auto-roots on its own, but decorating the handler gives the request a single, meaningfully-named root that everything nests under.
+Decorate each AI endpoint handler with `@span(kind="WORKFLOW")` so the whole request (its LLM calls, tools, and your own steps) groups under one root per request. A lone instrumented LLM call is itself a valid root, but decorating the handler gives the request a single, meaningfully named root that everything nests under.
 
 ```python
 import neatlogs
@@ -345,7 +345,7 @@ def handle_turn(...):
     ...
 
 # 3. Wrapper-only code (you only call neatlogs.wrap(...) and have no root of your own).
-# The wrapper's auto-root inherits the identify() context (works for framework wrappers too, neatlogs>=1.4.2):
+# The wrapped call's trace root inherits the identify() context (framework roots do too):
 with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"}):
     client.chat.completions.create(...)
 ```

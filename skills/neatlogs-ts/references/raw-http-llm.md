@@ -75,10 +75,10 @@ async function rawGeminiCall(model: string, inputMessages: any[], payload: objec
 }
 ```
 
-The explicit `WORKFLOW` is required because a manual `LLM` cannot finalize as
-a parentless root. Omit that extra root only when a real eligible
-`WORKFLOW`/`CHAIN`/`AGENT`/`MCP_TOOL` parent is already active. Supported
-wrappers self-root and must not be placed inside this manual LLM pattern.
+The manual `LLM` can finalize as a parentless root. Keep the explicit
+`WORKFLOW` only when this call belongs to a larger app-owned run. Supported
+wrappers already own their LLM span and must not be placed inside this manual
+LLM pattern.
 
 ---
 
