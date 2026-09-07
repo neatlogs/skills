@@ -132,9 +132,9 @@ await init({ debug: true });
 | Using `trace()` for custom functions where `span()` would work | That's what `span()` is for | Use `span({ kind: 'CHAIN' })` or the appropriate kind |
 | Passing `instrumentations: ['openai']` (or any provider/framework key) | `init()` **throws** | Remove the key; use `wrapOpenAI(client)` etc. |
 | Leaving a client unwrapped | Its LLM calls won't be traced | Apply the helper to every provider client your code constructs |
-| Using `span({ kind: 'RERANKER' })` or `span({ kind: 'VECTOR_STORE' })` | `span()` throws Error for invalid kinds | Below an eligible root, use `trace({ name: '...', kind: 'RERANKER' as any })`; the cast is required by the current narrow type declaration |
+| Using `span({ kind: 'RERANKER' })` or `span({ kind: 'VECTOR_STORE' })` | `span()` throws Error for invalid kinds | Use `trace({ name: '...', kind: 'RERANKER' as any })`; the cast is required by the current narrow type declaration and a standalone call is auto-rooted |
 | Using dynamic `import()` "so instrumentation applies" | Pointless — helpers patch instances, not modules | Use a plain static `import` |
-| Using `span({ kind: 'LLM' })` | `LLM` is not a valid kind for `span()` | For an unsupported/raw call below an eligible root only, use `trace({ name: '...', kind: 'LLM' as any })`; otherwise use the supported wrapper/integration |
+| Using `span({ kind: 'LLM' })` | `LLM` is not a valid kind for `span()` | For an unsupported/raw call, use `trace({ name: '...', kind: 'LLM' as any })`; a parentless LLM is root-eligible |
 
 ---
 
@@ -146,7 +146,7 @@ This section applies only to a raw HTTP or unsupported SDK call with no wrapper,
 handler, hook, processor, or instrumentor. Automatically captured calls must
 not get another manual LLM trace.
 
-**Root cause**: `trace()` stamps `neatlogs.internal = true` on every span by default. The backend drops internal LLM spans when it expects an auto-instrumented sibling.
+**Root cause**: `trace()` stamps `neatlogs.internal = true` by default. A parentless manual LLM is retained as the trace root, but a nested internal LLM can be deduplicated as a wrapper helper.
 
 **Fix**: Opt out of the internal flag inside the callback:
 
@@ -159,7 +159,7 @@ await trace({ name: 'raw_api_request', kind: 'WORKFLOW' }, async () =>
 );
 ```
 
-If a real eligible `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` parent is already active, reuse it instead of adding the example root. A manual `LLM` cannot finalize as a parentless root.
+If a real eligible parent is already active, reuse it instead of adding another root and set `neatlogs.internal = false` only on the manually owned raw LLM child. A parentless manual LLM can finalize as its own root.
 
 > Do NOT override `neatlogs.internal = false` on a `trace()` that wraps a call a `wrap*` helper already traces. The wrapper's own LLM span IS the canonical record — leaving the internal flag in place correctly removes the redundant outer span.
 

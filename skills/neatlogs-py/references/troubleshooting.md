@@ -59,7 +59,7 @@ If traces are not appearing in the NeatLogs dashboard, check these in order:
 4. **Is `NEATLOGS_API_KEY` set?** → No → Set it via env var or `api_key=` param. Without it, export is **silently disabled** with no error.
 5. **Library version too old for its instrumentor?** → Some OpenInference-based instrumentors require a minimum library version and **silently emit no spans** below it. Notably `instrumentations=["dspy"]` requires **DSPy ≥ 2.6.0**. Fix: upgrade the library, or use `neatlogs.wrap(client_or_module)` instead (the `wrap()` path has no version requirement).
 
-> **You do NOT need a manual `@span(kind="WORKFLOW")` for a single instrumented call to render.** `neatlogs.wrap()` and auto-instrumentation open a `WORKFLOW` root automatically for an otherwise-parentless provider/LLM call. Add a manual root only when the app-owned request, job, agent loop, or pipeline stage performs meaningful pre/post work or coordinates multiple captured children; its absence is never why a single wrapped call's trace is missing. (Note: this is specific to `wrap()`/auto-instrumentation; spans you create yourself with `@span`/`trace()` still need a parent, and framework handlers/processors create their own root.)
+> **You do NOT need a manual `@span(kind="WORKFLOW")` for a single call to render.** A parentless LLM is root-eligible, and current manual APIs add one workflow parent for a standalone non-root kind. Add a manual root only when the app-owned request, job, agent loop, or pipeline stage performs meaningful pre/post work or coordinates multiple captured children.
 
 ---
 

@@ -1,6 +1,6 @@
 # Span Kinds Reference
 
-Supported wrappers, handlers, hooks, processors, and native integrations own the semantic spans they capture. The manual non-root examples below are only for unsupported/raw/custom operations and assume the real application path already has an active parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` root. Do not add a placeholder root around a lone supported call; supported capture layers self-root. `@span()` accepts `EVALUATOR` and `MEMORY`; only `LLM`, `RERANKER`, and `VECTOR_STORE` are rejected.
+Supported wrappers, handlers, hooks, processors, and native integrations own the semantic spans they capture. A parentless `WORKFLOW`, `CHAIN`, `AGENT`, `MCP_TOOL`, or `LLM` is root-eligible. Current manual APIs add one workflow parent for a standalone non-root operation, while nested spans keep their real parent. Do not add a placeholder root around a lone supported call. `@span()` accepts `EVALUATOR` and `MEMORY`; only `LLM`, `RERANKER`, and `VECTOR_STORE` are rejected by the decorator and use `trace()` instead.
 
 ## WORKFLOW
 Top-level entry that orchestrates the full pipeline. One per program/request.

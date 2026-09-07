@@ -19,7 +19,7 @@ Use `@neatlogs.span(kind="WORKFLOW"|"CHAIN"|"AGENT")` only when a function perfo
 
 Use a manual `neatlogs.trace(..., kind="LLM")` only when no wrapper, callback handler, hook, processor, or instrumentor owns the call, such as raw HTTP or an unsupported SDK. The manual span must record canonical input, output, model, token usage, status, streaming completion, and errors. Do not rewrite unrelated user code solely for instrumentation.
 
-Put the LLM span under an eligible orchestration root; a parentless manual LLM span is not a valid finalized trace. Set canonical attributes directly:
+A parentless manual LLM span is a valid single-call trace. Add an orchestration root only when this raw call belongs to a larger app-owned run. Set canonical attributes directly:
 
 ```python
 from opentelemetry.trace import Status, StatusCode

@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-09-07
+
+### Fixed
+
+- Aligned Python and TypeScript root guidance with the backend: parentless LLM spans are valid roots, while standalone non-root manual spans receive one workflow parent.
+
 ## [1.2.6] - 2026-09-03
 
 ### Added
@@ -73,7 +79,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.7...HEAD
+[1.2.7]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...skills-v1.2.7
 [1.2.6]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...skills-v1.2.6
 [1.2.5]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...skills-v1.2.5
 [1.2.4]: https://github.com/neatlogs/skills/compare/skills-v1.2.3...skills-v1.2.4

@@ -33,7 +33,7 @@ Invalid examples:
 - A manual node/tool/retriever span already emitted by the LangChain handler.
 - A provider instrumentor around model calls routed through a framework wrapper that already emits LLM spans.
 
-For unsupported/raw operations and their canonical attributes, use [`decorators-and-traces.md`](decorators-and-traces.md). A manual non-root semantic kind (`LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, `EVALUATOR`, or `MEMORY`) must run below an eligible `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` root. Use `@span(kind="EVALUATOR")` or `@span(kind="MEMORY")` for ordinary custom functions. Use `trace()` only for the rejected `LLM`, `RERANKER`, and `VECTOR_STORE` kinds, or when a raw/custom operation has no decorator boundary or needs direct canonical metadata, such as a DeepEval callback.
+For unsupported/raw operations and their canonical attributes, use [`decorators-and-traces.md`](decorators-and-traces.md). `LLM` is root-eligible; current SDK manual APIs add one `WORKFLOW` parent for any other standalone non-root semantic kind. Use `@span(kind="EVALUATOR")` or `@span(kind="MEMORY")` for ordinary custom functions. Use `trace()` only for the decorator-rejected `LLM`, `RERANKER`, and `VECTOR_STORE` kinds, or when a raw/custom operation has no decorator boundary or needs direct canonical metadata, such as a DeepEval callback.
 
 ## Root behavior
 
@@ -41,13 +41,13 @@ The integration need not literally emit a `WORKFLOW`. It must produce a parentle
 
 | Capture owner | Standalone root behavior |
 |---|---|
-| Direct provider `wrap(...)` and supported provider instrumentors | synthesize `WORKFLOW` above a parentless LLM/embedding call |
-| LangChain handler | a chain/graph is a `CHAIN` root; a bare LLM/tool/retriever gets a synthetic `WORKFLOW` |
+| Direct provider `wrap(...)` and supported provider instrumentors | a parentless LLM is the root; a non-root provider operation receives a `WORKFLOW` parent |
+| LangChain handler | a chain/graph is a `CHAIN` root; a bare LLM is the root; a bare tool/retriever receives a `WORKFLOW` parent |
 | OpenAI Agents processor / Google ADK runner / CrewAI crew or flow | emits `WORKFLOW` |
 | Pydantic AI / Agno agent or team / Hermes / Claude Agent SDK | emits `AGENT` (Agno Workflow emits `WORKFLOW`) |
 | DSPy module | emits `CHAIN`; a bare DSPy LLM/retriever must be invoked through its module or an explicit orchestration root |
 | Strands native telemetry | `invoke_agent` is the `AGENT` root; this path requires the shared/global provider mode used by the Strands integration |
-| Manual unsupported operation | no automatic root; add genuine application orchestration |
+| Manual unsupported operation | a parentless LLM is the root; other standalone kinds receive a `WORKFLOW` parent |
 
 ## Verify
 

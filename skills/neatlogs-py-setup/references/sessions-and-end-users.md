@@ -56,7 +56,7 @@ with neatlogs.trace("chat_turn", session_id="conv_123", end_user_id="u_456"):
 ```
 
 **If you only called `neatlogs.wrap(client)`** and open no root of your own, bind
-identity for the turn with `identify()` — the wrapper's auto-root inherits it:
+identity for the turn with `identify()` — the parentless LLM root inherits it:
 
 ```python
 with neatlogs.identify(session_id="conv_123", end_user_id="u_456", end_user_metadata={"plan": "pro"}):

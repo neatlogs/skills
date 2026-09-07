@@ -379,7 +379,7 @@ Use `span()` to represent real custom orchestration. Call handler-owned operatio
 
 ## 6. Custom Span Attributes via `trace()`
 
-Manual non-root kinds must run below a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. The LangChain handler self-roots, but `trace({ kind: 'LLM'|'RERANKER'|'VECTOR_STORE'|... })` does not.
+`LLM` is root-eligible. Current manual APIs add one `WORKFLOW` parent when another semantic kind would otherwise be parentless; nested calls keep their real parent. The LangChain handler also self-roots its supported runs.
 
 Manual spans must use these exact canonical keys:
 
@@ -473,4 +473,4 @@ async function rawLlmCall(prompt: string) {
 }
 ```
 
-> **Important**: `neatlogs.internal = false` makes the unsupported manual LLM span user-visible, but it does not make an LLM root eligible for finalization. Keep the explicit orchestration root unless one is already active. Never use this manual span for a LangChain-owned call.
+> **Important**: a parentless LLM is already root-eligible. Set `neatlogs.internal = false` when this manually owned LLM is nested under an explicit root so legacy wrapper deduplication does not treat it as a redundant helper span. Never use this manual span for a LangChain-owned call.

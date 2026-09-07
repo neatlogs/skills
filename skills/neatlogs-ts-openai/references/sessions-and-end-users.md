@@ -26,7 +26,7 @@ Without this, traces are anonymous. With it you get customer-level analytics:
 
 ## The model
 
-- **One turn = one trace.** Each user message → one root trace (the auto-root of the wrapped LLM call, or a manual `trace()` / `span()`).
+- **One turn = one trace.** Each user message → one root trace (the parentless wrapped LLM span, or a manual `trace()` / `span()`).
 - **A session groups turns.** Reuse the **same `sessionId`** across every turn of a conversation and the backend stitches them into one session timeline.
 - **End-user is per session.** Set `endUserId` (+ optional `endUserMetadata`) on each turn's root; it identifies *your app's* customer, not the SDK operator.
 - **Identity is root-only.** Set it once on the trace root — the backend rolls it up across all child spans. Do not set it on nested spans.
@@ -35,7 +35,7 @@ Without this, traces are anonymous. With it you get customer-level analytics:
 
 ## Wrapper-only: `identify()` per turn
 
-When the project only uses a provider wrapper (`wrapOpenAI`, `wrapAnthropic`, …) with no manual root, wrap each turn in `identify()`. The wrapper's auto-root inherits the session + end-user:
+When the project only uses a provider wrapper (`wrapOpenAI`, `wrapAnthropic`, …) with no manual root, wrap each turn in `identify()`. The parentless LLM root inherits the session + end-user:
 
 ```typescript
 import { init, identify, wrapOpenAI } from 'neatlogs';

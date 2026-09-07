@@ -48,7 +48,7 @@ A provider with no helper (Cohere, Groq, Mistral, Ollama, Together, raw `fetch`)
 - NEVER pass `instrumentations: [...]` to `init()` — it **throws** for every provider key. Wrap the client instead.
 - Every provider client the code constructs must be wrapped; an unwrapped client is silently untraced.
 - All lifecycle calls are async: `await init/flush/shutdown`.
-- The wrapper captures the provider LLM call (input/output, model, tokens, latency) and auto-opens a WORKFLOW root if the call would be parentless. It is the canonical LLM span.
+- The wrapper captures the provider LLM call (input/output, model, tokens, latency). A parentless LLM is the trace root; no blank WORKFLOW wrapper is added. It is the canonical LLM span.
 - NEVER put `trace({ kind:'LLM' })`, `span()`, or another provider/framework instrumentor around a single wrapped call. That creates redundant instrumentation. A WORKFLOW/CHAIN/AGENT span may enclose several wrapped calls to represent real orchestration.
 - Use manual `trace({ kind:'LLM' })` only for a provider or raw HTTP call that no supported capture layer owns. Manual spans must record their own input, output, model, usage, and errors.
 - Never hardcode API keys — use `process.env`.

@@ -6,7 +6,7 @@ Never add a manual span of the same semantic kind around a call already captured
 
 ## Root requirement
 
-A completed trace must contain a parentless `WORKFLOW`, `CHAIN`, `AGENT`, or `MCP_TOOL` span. Direct provider wrappers and supported framework integrations create an eligible root when needed. A standalone manual `LLM`, `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, `EVALUATOR`, or `MEMORY` span does not; put it under a real orchestration root.
+A completed trace must contain a parentless `WORKFLOW`, `CHAIN`, `AGENT`, `MCP_TOOL`, or `LLM` span. Current SDK manual APIs add one `WORKFLOW` parent when a standalone `TOOL`, `RETRIEVER`, `RERANKER`, `EMBEDDING`, `VECTOR_STORE`, `GUARDRAIL`, `EVALUATOR`, or `MEMORY` would otherwise be parentless. Nested calls keep their real parent. Add an explicit orchestration root when several operations belong to one run, not merely to make one operation render.
 
 ```python
 @neatlogs.span(kind="WORKFLOW", name="answer_question")
@@ -164,7 +164,7 @@ Use `neatlogs.log()` inside an active Neatlogs span and enable `capture_logs=Tru
 
 ## Verification
 
-- [ ] Every manual span is under an eligible root unless a supported capture owner self-roots.
+- [ ] Every trace has one eligible root; standalone non-root manual spans receive one automatic workflow parent.
 - [ ] Every real operation has exactly one semantic capture owner.
 - [ ] Unsupported operations populate the canonical kind-specific attributes above.
 - [ ] Streaming spans remain open until final output/usage or cancellation/error.

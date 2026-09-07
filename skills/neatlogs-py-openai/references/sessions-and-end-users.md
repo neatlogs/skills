@@ -29,7 +29,7 @@ Attach a session and end-user to your traces to turn them into customer analytic
 
 ## This Skill's Path: `wrap()` + `identify()`
 
-This skill instruments OpenAI with `neatlogs.wrap(OpenAI())`, which gives the wrapped call an auto-root. Bind identity per turn with `neatlogs.identify(...)` around the wrapped call — the auto-root inherits the session and end-user:
+This skill instruments OpenAI with `neatlogs.wrap(OpenAI())`. Its parentless LLM span is the trace root. Bind identity per turn with `neatlogs.identify(...)` around the wrapped call so that root inherits the session and end-user:
 
 ```python
 import neatlogs
