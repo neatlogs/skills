@@ -22,8 +22,21 @@
    import nlgenai "github.com/neatlogs/neatlogs-go/contrib/genai"
    ```
 
-> **Do NOT use `contrib/adk`.** The Google ADK integration is deprecated and non-functional under the private-provider design (ADK binds to the global OTel provider Neatlogs no longer owns). Instrument model calls and boundaries explicitly instead.
+4. For **Google ADK**, install the explicit private-provider integration:
+
+   ```sh
+   go get github.com/neatlogs/neatlogs-go/contrib/adk
+   ```
+
+   Import it separately (commonly aliased `nladk`):
+
+   ```go
+   import nladk "github.com/neatlogs/neatlogs-go/contrib/adk"
+   ```
+
+   This is not global OTel auto-instrumentation. The application must use
+   `nladk.InstrumentConfig(...)` and `nladk.Run(...)` as described in Step 4.
 
 ## Verification
 
-Run `go mod tidy` and confirm `github.com/neatlogs/neatlogs-go` (and, if using Gemini, `github.com/neatlogs/neatlogs-go/contrib/genai` + `google.golang.org/genai`) appear in `go.mod`. Proceed to Step 2.
+Run `go mod tidy` and confirm `github.com/neatlogs/neatlogs-go` plus each selected integration module (`contrib/genai` for Gemini and/or `contrib/adk` for Google ADK) appear in `go.mod`. Keep the root and selected contrib modules on the same released version. Proceed to Step 2.

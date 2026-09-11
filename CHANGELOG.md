@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-09-11
+
+### Fixed
+
+- Restored Go Google ADK instructions using the explicit private-provider `contrib/adk` integration, including model/tool capture, workflow I/O, A2A propagation, and duplicate-span safeguards.
+
 ## [1.2.7] - 2026-09-07
 
 ### Fixed
@@ -79,7 +85,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.7...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.8...HEAD
+[1.2.8]: https://github.com/neatlogs/skills/compare/skills-v1.2.7...skills-v1.2.8
 [1.2.7]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...skills-v1.2.7
 [1.2.6]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...skills-v1.2.6
 [1.2.5]: https://github.com/neatlogs/skills/compare/skills-v1.2.4...skills-v1.2.5
