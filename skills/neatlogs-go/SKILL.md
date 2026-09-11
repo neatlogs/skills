@@ -1,6 +1,6 @@
 ---
 name: neatlogs-go
-description: Use when adding neatlogs observability to a Go project — Google Gemini (genai), direct LLM/provider calls, retrieval, service boundaries, or custom code. Covers Init, WrapGenAI, explicit span helpers (StartLLMSpan / StartRetrieverSpan / StartToolSpanFromHeaders), Trace, and Identify (sessions & end-users).
+description: Use when adding neatlogs observability to a Go project — Google Gemini (genai), Google ADK, direct LLM/provider calls, retrieval, service boundaries, or custom code. Covers Init, WrapGenAI, the private-provider ADK integration, explicit span helpers, Trace, and Identify.
 metadata:
   author: neatlogs
   language: go
@@ -14,8 +14,10 @@ The Go SDK is OpenTelemetry-based but keeps to a **private tracer provider**:
 (no `otel.SetTracerProvider` / `SetTextMapPropagator`). So Neatlogs can neither
 export nor parent (nor be parented by) a co-tenant tracer like Datadog — and,
 symmetrically, OTel-native frameworks are **not** auto-captured. You instrument
-explicitly: `WrapGenAI()` wraps a `google.golang.org/genai` client, and a small
-set of span helpers cover direct provider calls, retrieval, and boundaries.
+explicitly: `WrapGenAI()` wraps a `google.golang.org/genai` client,
+`contrib/adk` instruments Google ADK through injected model/tool callbacks and
+a run wrapper, and a small set of span helpers cover direct provider calls,
+retrieval, and boundaries.
 Export is OTLP/HTTP to the managed Neatlogs cloud.
 
 ## Transport selection
@@ -29,14 +31,8 @@ apps that only need the core helpers.
 ```bash
 go get github.com/neatlogs/neatlogs-go
 go get github.com/neatlogs/neatlogs-go/contrib/genai   # only if wrapping Gemini
+go get github.com/neatlogs/neatlogs-go/contrib/adk     # only if using Google ADK
 ```
-
-<Callout type="info">
-  `contrib/adk` (Google ADK passthrough + `WrapModel` + A2A helpers) is
-  **deprecated and non-functional** under the private-provider design — ADK binds
-  to the global provider Neatlogs no longer owns. Instrument model calls and
-  boundaries explicitly instead.
-</Callout>
 
 ## The small public API most integrations need
 
@@ -44,7 +40,8 @@ go get github.com/neatlogs/neatlogs-go/contrib/genai   # only if wrapping Gemini
 `neatlogs.StartSpan(ctx, name, kind, attrs...)`, `neatlogs.Identify(ctx, IdentifyOptions{...})`,
 `genai.WrapGenAI(client)` (from `contrib/genai`), and the explicit span helpers
 `neatlogs.StartLLMSpan`, `neatlogs.StartRetrieverSpan`, `neatlogs.StartToolSpanFromHeaders`,
-plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process boundaries.
+`adk.InstrumentConfig` and `adk.Run` (from `contrib/adk`), plus
+`neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process boundaries.
 
 ## Core mechanism
 
@@ -65,7 +62,26 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
    ```
    `WrapGenAI` owns the canonical LLM span. Do not surround calls through `gc`
    with `Trace`, `StartSpan(..., "llm")`, or `StartLLMSpan`.
-3. **Direct provider calls (OpenAI/Anthropic/…)** — open an LLM span you fill in:
+3. **Google ADK** — instrument the agent config and drive each turn through the
+   Neatlogs run wrapper:
+   ```go
+   import nladk "github.com/neatlogs/neatlogs-go/contrib/adk"
+
+   config := nladk.InstrumentConfig(llmagent.Config{
+       Name: "support_agent", Model: model, Tools: tools,
+   })
+   adkAgent, err := llmagent.New(config)
+   // Build runner with adkAgent, then:
+   for event, err := range nladk.Run(
+       ctx, runner, userID, sessionID, message, agent.RunConfig{},
+   ) {
+       // Handle the unchanged ADK event stream.
+   }
+   ```
+   `InstrumentConfig` owns model/tool spans. `Run` owns the workflow root,
+   identity, input/output, and private trace context. Use both; do not add a
+   second LLM span around the wrapped model call.
+4. **Direct provider calls (OpenAI/Anthropic/…)** — open an LLM span you fill in:
    ```go
    ctx, llm := neatlogs.StartLLMSpan(ctx, neatlogs.LLMCallOptions{
        Provider: "openai", Model: "gpt-5.5",
@@ -76,7 +92,7 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
    llm.SetOutputMessage("assistant", out)
    llm.SetUsage(promptTok, completionTok, totalTok)
    ```
-4. **Custom code / boundaries** — open a span you control:
+5. **Custom code / boundaries** — open a span you control:
    ```go
    ctx, span, end := neatlogs.Trace(ctx, "handle_request") // workflow root
    defer end()
@@ -87,7 +103,7 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
 1. **Install** → `references/1-install.md`
 2. **Add Init (+ deferred shutdown)** → `references/2-add-init.md`
 3. **Set environment variables** → `references/3-set-env.md`
-4. **Wrap Gemini + explicit span helpers** → `references/4-wrap-genai-adk.md`
+4. **Instrument Gemini, Google ADK, or direct calls** → `references/4-wrap-genai-adk.md`
 5. **Trace custom code** → `references/5-trace-custom-code.md`
 6. **Sessions & end-users (`Identify`)** → `references/sessions-and-end-users.md`
 
@@ -95,7 +111,9 @@ plus `neatlogs.InjectTraceContext` / `ExtractTraceContext` for cross-process bou
 
 - `neatlogs.Init()` MUST include `APIKey: os.Getenv("NEATLOGS_API_KEY")` (or set the env var) — without it, export is disabled and spans are dropped silently.
 - `Init` is single-shot; call it once at startup. Always `defer shutdown(ctx)` (or call it before exit) so buffered spans flush.
-- **The provider is private.** `Init` does NOT register the global OTel provider, so OTel-native frameworks (including Google ADK) are **not** auto-captured. Instrument model calls / boundaries explicitly with `WrapGenAI` or the span helpers. Do NOT reach for `contrib/adk` — it is deprecated and non-functional.
+- **The provider is private.** `Init` does NOT register the global OTel provider, so Google ADK is not passively auto-captured. For ADK, use `contrib/adk`'s explicit `InstrumentConfig` + `Run` integration; for other calls use `WrapGenAI` or the span helpers.
+- **Google ADK needs both owners.** `InstrumentConfig` captures model/tool spans; `Run` supplies the workflow root, identity, input/output, and private trace context. Do not rely on ADK's global OTel spans, and do not add a second `WrapModel` or `StartLLMSpan` around an already instrumented ADK model.
+- For remote ADK agents, use `A2AHTTPClient` and `A2AHandler` for propagation plus `A2ABeforeRequest` / `A2AAfterRequest` for client-side I/O. These helpers do not create HTTP spans.
 - Gemini wrapping lives in `contrib/genai`: import `nlgenai "github.com/neatlogs/neatlogs-go/contrib/genai"` and call `nlgenai.WrapGenAI(client)` (NOT `neatlogs.WrapGenAI`).
 - **Use exactly one capture owner per model call.** `WrapGenAI` owns Gemini calls made through the wrapped client. Never add `Trace`, an `llm` `StartSpan`, or `StartLLMSpan` around those calls. Use `StartLLMSpan` only for a direct or unsupported provider call that has no supported wrapper.
 - Session & end-user identity is per-request — set it with `neatlogs.Identify(ctx, ...)`, NEVER on `Init`. It rides on `ctx`. See step 6.
@@ -134,6 +152,11 @@ helpers, confirm each `StartLLMSpan` / `StartRetrieverSpan` records its I/O (an
 empty retriever result is recorded as `"[]"`, not omitted).
 `StartRetrieverSpan` emits the canonical `neatlogs.retriever.*` namespace;
 never emit the legacy `neatlogs.retrieval.*` spelling from new code.
+
+For Google ADK, confirm one `workflow` root with the expected `llm` and `tool`
+children, that root and LLM input/output are populated, and that token usage is
+present when ADK returns it. For A2A, also confirm the semantic `agent` span.
+Confirm no transport-only HTTP span was introduced.
 
 ## Safety gate
 

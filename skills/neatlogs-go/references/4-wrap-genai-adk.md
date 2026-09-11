@@ -1,4 +1,4 @@
-# Step 4: Capture LLM calls (Gemini & direct providers)
+# Step 4: Capture LLM calls (Gemini, Google ADK & direct providers)
 
 Pick the path(s) that match how the app calls models. The Go SDK uses a
 **private provider**, so nothing is auto-captured — every model call is
@@ -59,7 +59,52 @@ traced; any other method is reachable via `gc.Raw()`.
 (`256`), or the model spends the budget on hidden reasoning and the visible
 output gets truncated or comes back empty.
 
-## B. Direct provider calls via `StartLLMSpan`
+## B. Google ADK via `contrib/adk`
+
+Google ADK resolves its native spans from the global OpenTelemetry provider,
+which Neatlogs intentionally does not own. Use the explicit private-provider
+integration instead: instrument the LLM-agent config, then drive each turn
+through `nladk.Run`.
+
+```go
+import (
+    nladk "github.com/neatlogs/neatlogs-go/contrib/adk"
+    "google.golang.org/adk/agent"
+    "google.golang.org/adk/agent/llmagent"
+)
+
+config := nladk.InstrumentConfig(llmagent.Config{
+    Name:  "support_agent",
+    Model: model,
+    Tools: tools,
+})
+adkAgent, err := llmagent.New(config)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Build the runner with adkAgent, then replace runner.Run with nladk.Run.
+for event, err := range nladk.Run(
+    ctx, runner, userID, sessionID, message, agent.RunConfig{},
+) {
+    // Handle the same ADK event stream as before.
+}
+```
+
+`InstrumentConfig` wraps the model and installs tool callbacks while preserving
+existing callbacks. `Run` creates the `workflow` root, applies session/end-user
+identity, records root input/output, and carries the private Neatlogs context to
+the model and tool spans. Use both. Do not surround the model with another
+`StartLLMSpan`, and do not also call `WrapModel` when `InstrumentConfig` already
+did so.
+
+For A2A agents, use `nladk.A2AHTTPClient()` on the caller and
+`nladk.A2AHandler(handler)` on the receiver for W3C context propagation. Add
+`nladk.A2ABeforeRequest` and `nladk.A2AAfterRequest` to the ADK request
+callbacks when client-side request/response I/O is required. These helpers
+create semantic agent spans, not transport HTTP spans.
+
+## C. Direct provider calls via `StartLLMSpan`
 
 For OpenAI / Anthropic / any provider `WrapGenAI` doesn't cover, open an LLM span
 you fill in. It auto-roots under a `workflow` span when there's no active parent.
@@ -86,16 +131,6 @@ llm.SetFinishReason("stop")
 
 Span name defaults to `"{provider}.chat"`; override with `LLMCallOptions.Name`.
 
-## Do NOT use `contrib/adk`
-
-The Google ADK integration (`contrib/adk`, `WrapModel`, A2A helpers) is
-**deprecated and non-functional**. It relied on `Init` registering the global
-OTel provider so ADK's own spans flowed through — but the SDK now uses a private
-provider and never touches global OTel state, so ADK spans never reach Neatlogs.
-There is no drop-in replacement for automatic ADK capture; instrument the model
-calls the agent makes with `StartLLMSpan`, and boundaries with `StartSpan` /
-`StartToolSpanFromHeaders`.
-
 ## Verify
 
 - Gemini: calls go through `gc` (the wrapped client), not the raw `client`, and
@@ -106,4 +141,7 @@ calls the agent makes with `StartLLMSpan`, and boundaries with `StartSpan` /
 - Direct providers: every model call is bracketed by `StartLLMSpan` … `llm.End()`
   with output + usage set (or `SetError` on failure), but only when no supported
   wrapper owns that call.
-- No `contrib/adk` import anywhere.
+- Google ADK: the `llmagent.Config` passes through `InstrumentConfig`, the turn
+  runs through `nladk.Run`, and exactly one workflow root is emitted with the
+  expected LLM/tool children plus root and model I/O. A2A calls add semantic
+  agent spans. No global-provider dependency or HTTP span is introduced.

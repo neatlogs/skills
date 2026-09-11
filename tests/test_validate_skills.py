@@ -289,3 +289,20 @@ def test_go_skill_has_approved_version_matched_cli_installation() -> None:
     )
     assert "explicit user approval" in text
     assert "binary and project module versions match" in normalized
+
+
+def test_go_skill_uses_private_provider_adk_integration() -> None:
+    skill = (ROOT / "skills" / "neatlogs-go" / "SKILL.md").read_text()
+    install = (
+        ROOT / "skills" / "neatlogs-go" / "references" / "1-install.md"
+    ).read_text()
+    capture = (
+        ROOT / "skills" / "neatlogs-go" / "references" / "4-wrap-genai-adk.md"
+    ).read_text()
+    combined = "\n".join((skill, install, capture))
+
+    assert "github.com/neatlogs/neatlogs-go/contrib/adk" in combined
+    assert "nladk.InstrumentConfig" in combined
+    assert "nladk.Run" in combined
+    assert "These helpers do not create HTTP spans" in combined
+    assert "deprecated and non-functional" not in combined
