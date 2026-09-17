@@ -283,10 +283,10 @@ Mastra agent, workflow, tool, and LLM step spans are automatically captured.
 ## 10. Vercel AI SDK (`ai` package)
 
 - **Import**: `import { wrapAISDK } from 'neatlogs/ai'` (built into the SDK, no separate package)
-- **Compatibility**: `ai >=3 <7` (v3, v4, v5, v6)
-- **No monkey-patching**: the AI SDK supports OpenTelemetry natively via `experimental_telemetry`. The wrapper opts in per call site, so there's no fragile module patching.
+- **Compatibility**: `ai >=6 <8` (v6 and v7). AI SDK v7 requires Node.js 22+.
+- **No monkey-patching**: the AI SDK supports OpenTelemetry natively via `experimental_telemetry` in v6 and `telemetry` in v7. The wrapper opts in per call site, so there's no fragile module patching.
 
-> **Two APIs**: use `wrapAISDK(ai)` for the ergonomic wrapper (recommended), or `createAITelemetry()` for direct `experimental_telemetry` injection on individual calls.
+> **Two APIs**: use `wrapAISDK(ai)` for the ergonomic wrapper (recommended), or `createAITelemetry()` for direct injection on individual calls (`experimental_telemetry` in v6, `telemetry` in v7).
 
 ### Recommended: `wrapAISDK`
 
@@ -314,8 +314,8 @@ await shutdown();
 
 Each wrapped call:
 1. Opens a parent OTel span on the active `TracerProvider` with `openinference.span.kind = 'WORKFLOW'` (for generateText/streamText/generateObject/streamObject) or `'CHAIN'` (for embed/embedMany/rerank). The AI SDK's native `ai.doGenerate` / `ai.doStream` child spans remain `LLM`; tool-call children remain `TOOL`.
-2. Forces `experimental_telemetry: { isEnabled: true, recordInputs: true, recordOutputs: true, tracer, metadata: { neatlogsWrapped: true } }` for that call. **`isEnabled: false` is overridden** — to skip telemetry for a specific call, use the unwrapped `ai` import directly.
-3. Captures `input.value` (always) and `output.value`. For `generateText`/`generateObject` this is the awaited result; for `streamText`/`streamObject` it's captured from the AI SDK's `onFinish` callback (with `gen_ai.finish_reason`), preserving any user-provided `onFinish`/`onError`. `generateObject`/`streamObject` structured output (`ai.response.object`) maps to the LLM child's output.
+2. Forces the version-appropriate telemetry option with inputs, outputs, the Neatlogs tracer, and merged metadata. **`isEnabled: false` is overridden** — to skip telemetry for a specific call, use the unwrapped `ai` import directly.
+3. Captures complete input/output, reasoning/thinking, and finish-reason metadata. For `generateText`/`generateObject` the parent captures the awaited result; streaming output is captured from `onFinish` while preserving user-provided callbacks. V7 `execute_tool` spans retain the tool name, nested arguments, and result.
 4. Sets `SpanStatusCode.ERROR` on rethrown exceptions.
 
 ### Lower-level: `createAITelemetry`
@@ -327,12 +327,22 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { createAITelemetry } from 'neatlogs/ai';
 
+// AI SDK v6
 await generateText({
   model: openai('gpt-4o-mini'),
   prompt: 'Hello',
   experimental_telemetry: createAITelemetry({ metadata: { userId: 'u-123' } }),
 });
+
+// AI SDK v7: the Neatlogs API is unchanged; only the AI SDK option name changes.
+await generateText({
+  model: openai('gpt-4o-mini'),
+  prompt: 'Hello',
+  telemetry: createAITelemetry({ metadata: { userId: 'u-123' } }),
+});
 ```
+
+`neatlogs` installs the v7 `@ai-sdk/otel` adapter as an optional dependency. Install `@ai-sdk/otel@^1` explicitly only when the project disables optional dependencies.
 
 ### Captured attributes (after pipeline normalization)
 
@@ -347,8 +357,10 @@ The Vercel AI SDK emits its own `ai.*` namespace; the SDK's `UnifiedAttributePro
 | `ai.usage.totalTokens` | `neatlogs.llm.token_count.total` |
 | `ai.prompt.messages` (JSON array) | `neatlogs.llm.input_messages.{i}.{role,content}` |
 | `ai.response.text` | `neatlogs.llm.output_messages.0.content` |
+| `ai.response.reasoning` | `neatlogs.llm.output_messages.0.thinking` |
 | `ai.response.toolCalls` (JSON array) | `neatlogs.llm.tool_calls.{i}.{name,arguments,id}` |
 | `ai.toolCall.name` / `args` / `result` | `tool.name` / `input.value` / `output.value` (on `ai.toolCall` spans) |
+| `gen_ai.tool.name` / `gen_ai.tool.call.arguments` / `gen_ai.tool.call.result` | `tool.name` / `input.value` / `output.value` (on v7 `execute_tool` spans) |
 | `ai.settings.{temperature,maxTokens,topP,…}` | `neatlogs.llm.{temperature,max_tokens,top_p,…}` |
 
 ### Note on `init({ instrumentations: ['ai_sdk'] })`

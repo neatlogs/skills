@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-09-17
+
+### Changed
+
+- Added Vercel AI SDK v6 and v7 guidance for the unchanged `wrapAISDK(ai)` API, version-specific telemetry options, Node.js and adapter requirements, and complete reasoning and tool I/O verification.
+
 ## [1.2.8] - 2026-09-11
 
 ### Fixed
@@ -85,7 +91,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.8...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.9...HEAD
+[1.2.9]: https://github.com/neatlogs/skills/compare/skills-v1.2.8...skills-v1.2.9
 [1.2.8]: https://github.com/neatlogs/skills/compare/skills-v1.2.7...skills-v1.2.8
 [1.2.7]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...skills-v1.2.7
 [1.2.6]: https://github.com/neatlogs/skills/compare/skills-v1.2.5...skills-v1.2.6
