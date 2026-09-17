@@ -38,7 +38,8 @@ If the project is a **Next.js** app (it has `next.config.*` / `app/` route handl
 - NEVER pass `instrumentations: ['ai_sdk']` (or any provider key) — `init()` **throws**. The wrapper is the instrumentation. A provider SDK called DIRECTLY outside the AI SDK needs its own helper (`wrapOpenAI`, `wrapAnthropic`, …).
 - Replace direct `ai` calls with the WRAPPED equivalents: destructure `generateText`/`streamText`/etc. from `wrapAISDK(ai)` and call those. Don't leave bare `import { generateText } from 'ai'` call sites — they won't be traced.
 - Do NOT also wrap wrapped calls in `span()`/`trace()` — the wrapper already opens the parent span. Add a `WORKFLOW` only when the application entry point owns a real multi-step request/job; keep each wrapped AI-SDK call as its canonical child.
-- The AI SDK supports both v3–v6; `wrapAISDK` is version-agnostic.
+- Neatlogs supports AI SDK v6 and v7 (`ai >=6 <8`). Keep using `wrapAISDK(ai)` in both versions; it selects v6's `experimental_telemetry` or v7's `telemetry` automatically.
+- AI SDK v7 requires Node.js 22+. Its `@ai-sdk/otel` adapter is an optional dependency of `neatlogs` and installs automatically unless optional dependencies are disabled.
 - Never hardcode API keys — use `process.env`.
 - For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
 
