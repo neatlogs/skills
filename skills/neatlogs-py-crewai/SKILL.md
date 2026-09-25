@@ -69,7 +69,7 @@ Emits an `AGENT` span (`crewai.agent.<role>`) capturing the `messages` input, wi
 - Instrument via `wrap(crew)`, not `instrumentations=[...]` — it captures agents/tasks/tools/LLM AND binds workflow metadata, and it is the only path that covers Flows / standalone Agents. (`instrumentations=["crewai"]` is a valid key that installs the same class hooks; if a project already has it, leave it — just add the `wrap()`.)
 - Wrap the Crew/Flow instance: `crew = neatlogs.wrap(crew)`. Returns the same instance.
 - Never hardcode API keys in source. Use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - Add imports ONLY for what a file uses:
   - File calls `neatlogs.wrap(...)`/`neatlogs.span(...)`/`neatlogs.trace(...)` → add `import neatlogs`.
 - `@neatlogs.span()` goes BELOW framework decorators, closest to `def`.

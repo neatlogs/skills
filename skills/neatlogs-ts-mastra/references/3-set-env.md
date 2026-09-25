@@ -15,9 +15,9 @@
 4. NEVER overwrite a key that already has a real value. Only ADD missing keys.
 5. Ensure `.env` is in `.gitignore`.
 
-## Do NOT pass endpoint= in code
+## Region endpoint
 
-Leave `endpoint` out of `init()` — the SDK defaults to the managed cloud. (Only pass `endpoint` for a self-hosted backend.)
+For EU projects, set `endpoint: 'https://eu.ingest.neatlogs.com'` in `init()`. For other managed projects, omit `endpoint`; preserve an explicit self-hosted endpoint.
 
 ## Verify BEFORE moving on
 1. `NEATLOGS_API_KEY` is in `.env`.

@@ -8,6 +8,8 @@ Send one nested JSON trace to:
 POST https://ingest.neatlogs.com/v1/trace
 ```
 
+For EU projects, send to `POST https://eu.ingest.neatlogs.com/v1/trace`.
+
 Authenticate with a Neatlogs write key in either `x-api-key` or `Authorization: Bearer ...`. When using a write key, include the target project name in the root-level `project` field.
 
 ```bash

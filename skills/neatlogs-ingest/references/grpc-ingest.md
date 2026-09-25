@@ -11,6 +11,8 @@ Metadata: x-api-key=<Neatlogs project key>
 Service: opentelemetry.proto.collector.trace.v1.TraceService/Export
 ```
 
+For EU projects, use `eu.ingest.neatlogs.com:443` with TLS and `x-api-key` gRPC metadata.
+
 Do not put the project key in `Authorization: Bearer ...` for gRPC; use `x-api-key` metadata.
 
 Standard OpenTelemetry environment variables:
@@ -20,6 +22,8 @@ export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
 export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://ingest.neatlogs.com
 export OTEL_EXPORTER_OTLP_TRACES_HEADERS=x-api-key=$NEATLOGS_API_KEY
 ```
+
+For EU projects, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://eu.ingest.neatlogs.com` with the same `grpc` protocol and `x-api-key` metadata.
 
 Register a batch span processor and flush or shut down the tracer provider before a short-lived process exits.
 
