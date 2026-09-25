@@ -23,7 +23,13 @@ export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://ingest.neatlogs.com
 export OTEL_EXPORTER_OTLP_TRACES_HEADERS=x-api-key=$NEATLOGS_API_KEY
 ```
 
-For EU projects, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://eu.ingest.neatlogs.com` with the same `grpc` protocol and `x-api-key` metadata.
+For EU projects, use this complete configuration instead:
+
+```bash
+export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=https://eu.ingest.neatlogs.com
+export OTEL_EXPORTER_OTLP_TRACES_HEADERS=x-api-key=$NEATLOGS_API_KEY
+```
 
 Register a batch span processor and flush or shut down the tracer provider before a short-lived process exits.
 
