@@ -17,7 +17,7 @@ Most real services do more than one thing: a chat copilot, a summarizer, a repor
 
 This skill is **language-agnostic**. Apply it alongside the language skill (`neatlogs-py`, `neatlogs-ts`, `neatlogs-go`) — those cover `init()` and span APIs; this covers how to split one codebase into N workflows.
 
-For managed Neatlogs, do not add an endpoint/base URL option or `NEATLOGS_ENDPOINT`; every SDK defaults to `https://ingest.neatlogs.com`.
+For EU projects, set the SDK init endpoint to `https://eu.ingest.neatlogs.com`. For other managed projects, omit the endpoint/base URL option and `NEATLOGS_ENDPOINT`.
 
 Canonical docs: https://docs.neatlogs.com/sdk/multiple-workflows
 

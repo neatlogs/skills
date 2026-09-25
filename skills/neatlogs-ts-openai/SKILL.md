@@ -52,7 +52,7 @@ A provider with no helper (Cohere, Groq, Mistral, Ollama, Together, raw `fetch`)
 - NEVER put `trace({ kind:'LLM' })`, `span()`, or another provider/framework instrumentor around a single wrapped call. That creates redundant instrumentation. A WORKFLOW/CHAIN/AGENT span may enclose several wrapped calls to represent real orchestration.
 - Use manual `trace({ kind:'LLM' })` only for a provider or raw HTTP call that no supported capture layer owns. Manual spans must record their own input, output, model, usage, and errors.
 - Never hardcode API keys — use `process.env`.
-- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint: 'https://eu.ingest.neatlogs.com'` in `init()`; for other managed projects, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`.
 
 ## Safety gate
 

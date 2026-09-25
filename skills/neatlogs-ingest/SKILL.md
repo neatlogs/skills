@@ -18,8 +18,11 @@ Keep the endpoints distinct:
 | HTTP ingest | `POST /v1/trace` | One nested JSON trace; Neatlogs generates IDs |
 | OTLP/HTTP | `POST /v1/traces` | OTLP protobuf from an OpenTelemetry exporter |
 | OTLP/gRPC | `ingest.neatlogs.com:443` | OTLP `TraceService/Export` |
+| OTLP/gRPC (EU projects) | `eu.ingest.neatlogs.com:443` | OTLP `TraceService/Export` |
 
 Never send the nested HTTP-ingest JSON body to `/v1/traces`.
+
+For EU projects, use `https://eu.ingest.neatlogs.com` as the SDK base URL, `POST https://eu.ingest.neatlogs.com/v1/trace` for direct JSON ingest, or `eu.ingest.neatlogs.com:443` for OTLP/gRPC.
 
 For retrieval attributes set directly by the caller, emit `neatlogs.retriever.*`. OpenTelemetry-native sources may emit `gen_ai.retrieval.*`; Neatlogs maps those during ingestion. Do not emit the legacy `neatlogs.retrieval.*` namespace from new integrations.
 

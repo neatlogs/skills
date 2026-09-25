@@ -2,16 +2,28 @@
 
 Use this dependency-free path by default when the application's language is not supported by a Neatlogs SDK.
 
-Send one nested JSON trace to:
+Send one nested JSON trace to the host for the project's region. For other managed projects:
 
 ```text
 POST https://ingest.neatlogs.com/v1/trace
 ```
 
+Select the ingest host for the project's region before running the example:
+
+```bash
+# EU project
+export NEATLOGS_INGEST_URL=https://eu.ingest.neatlogs.com
+```
+
+```bash
+# Other managed project
+export NEATLOGS_INGEST_URL=https://ingest.neatlogs.com
+```
+
 Authenticate with a Neatlogs write key in either `x-api-key` or `Authorization: Bearer ...`. When using a write key, include the target project name in the root-level `project` field.
 
 ```bash
-curl -X POST https://ingest.neatlogs.com/v1/trace \
+curl -X POST "$NEATLOGS_INGEST_URL/v1/trace" \
   -H "Content-Type: application/json" \
   -H "x-api-key: $NEATLOGS_WRITE_KEY" \
   -d '{

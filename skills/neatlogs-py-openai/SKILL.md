@@ -73,7 +73,7 @@ The captured LLM/EMBEDDING spans nest under your orchestration spans. Do not add
 - Prefer `neatlogs.wrap(client)` for OpenAI/Anthropic/Google GenAI; use `init(instrumentations=[...])` only for providers `wrap()` doesn't support. Never both for the same client.
 - Wrap EVERY supported LLM client whose calls you want traced: `client = neatlogs.wrap(client)`. Use the returned reference.
 - Never hardcode API keys in source. Use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - Add imports ONLY for what a file actually uses:
   - File calls `neatlogs.wrap(...)` / `neatlogs.span(...)` / a manual raw-call `neatlogs.trace(...)` → add `import neatlogs`.
 - When present, `import neatlogs` goes at module top level, never inside functions.
