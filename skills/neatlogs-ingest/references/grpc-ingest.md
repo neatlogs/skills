@@ -2,7 +2,7 @@
 
 Use OTLP/gRPC when an unsupported-language application already has OpenTelemetry instrumentation, or when an OpenTelemetry Collector is available. For an unsupported language with no OpenTelemetry setup, prefer the simpler HTTP ingest endpoint `POST /v1/trace`.
 
-Configure a standard OTLP trace exporter with:
+For other managed projects, configure a standard OTLP trace exporter with:
 
 ```text
 Endpoint: ingest.neatlogs.com:443
@@ -15,7 +15,7 @@ For EU projects, use `eu.ingest.neatlogs.com:443` with TLS and `x-api-key` gRPC 
 
 Do not put the project key in `Authorization: Bearer ...` for gRPC; use `x-api-key` metadata.
 
-Standard OpenTelemetry environment variables:
+OpenTelemetry environment variables for other managed projects:
 
 ```bash
 export OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=grpc

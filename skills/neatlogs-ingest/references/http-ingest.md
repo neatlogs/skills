@@ -2,7 +2,7 @@
 
 Use this dependency-free path by default when the application's language is not supported by a Neatlogs SDK.
 
-Send one nested JSON trace to:
+Send one nested JSON trace to the host for the project's region. For other managed projects:
 
 ```text
 POST https://ingest.neatlogs.com/v1/trace
