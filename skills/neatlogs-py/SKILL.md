@@ -49,7 +49,7 @@ Requires Python >= 3.10, < 3.14. Notable version pins: `crewai >= 1.9.3`.
 3. **One capture owner per operation** — wrappers, callback handlers, hooks, processors, native telemetry, and provider instrumentors own the spans they capture. Use `@span` for your own orchestration. Use manual `trace(kind="LLM")` only when no supported capture layer owns the LLM call.
 4. **Prefer the framework/provider-specific integration** over manual instrumentation. Never combine two capture layers for the same operation.
 5. **Init is single-shot**: `neatlogs.init()` configures the global telemetry provider. Calling it again is a no-op — it will NOT switch projects, even with a different `api_key`/`workflow_name`. If you need to reinitialize the SAME project, call `neatlogs.shutdown()` first (rare). If the need is a genuinely DIFFERENT project (different API key) from the same process, that's not a second `init()` at all — see [Multiple Projects](#multiple-projects-secondary-clients) below.
-6. **Region endpoint**: for EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`. For other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`. Preserve an explicit self-hosted endpoint.
+6. **Region endpoint**: for EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`. Once the regional dashboard is available, get EU project API keys from `https://eu.app.neatlogs.com/settings/api-keys`. For other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`. Preserve an explicit self-hosted endpoint.
 7. **Read reference docs** before implementing — NeatLogs updates frequently.
 
 ### Transport selection
@@ -109,7 +109,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
 neatlogs.init(
-    api_key="...",  # Get from https://app.neatlogs.com/settings/api-keys (or set NEATLOGS_API_KEY env var)
+    api_key="...",  # Get from your project's regional dashboard (or set NEATLOGS_API_KEY env var)
     workflow_name="my-api",
     instrumentations=["openai"],
 )

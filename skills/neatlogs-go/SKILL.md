@@ -119,7 +119,7 @@ go get github.com/neatlogs/neatlogs-go/contrib/adk     # only if using Google AD
 - Session & end-user identity is per-request — set it with `neatlogs.Identify(ctx, ...)`, NEVER on `Init`. It rides on `ctx`. See step 6.
 - Pass the `ctx` from `Identify` / `Trace` / `StartLLMSpan` down into whatever runs the turn — Go propagates identity and parent-span through `context.Context`.
 - Never hardcode the API key; use `os.Getenv`.
-- For EU projects, set `Endpoint: "https://eu.ingest.neatlogs.com"` in `neatlogs.Config`. For other managed projects, omit `Endpoint` and `NEATLOGS_ENDPOINT`. Preserve an explicit self-hosted endpoint.
+- For EU projects, set `Endpoint: "https://eu.ingest.neatlogs.com"` in `neatlogs.Config`. Once the regional dashboard is available, get EU project API keys from `https://eu.app.neatlogs.com/settings/api-keys`. For other managed projects, omit `Endpoint` and `NEATLOGS_ENDPOINT`. Preserve an explicit self-hosted endpoint.
 - **Multiple independent workflows in one service?** `Config.WorkflowName` is process-wide and single-shot. At each independent feature entry point, start a parentless `workflow` span with the canonical per-root override — `neatlogs.StartSpan(ctx, name, "workflow", attribute.String("neatlogs.workflow.name", name))` — so each fresh request/job becomes a distinct dashboard workflow. See the `neatlogs-multi-workflow` skill.
 
 ## `neatlogs.Init()` Config Reference
