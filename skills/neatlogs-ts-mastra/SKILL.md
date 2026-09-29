@@ -45,7 +45,7 @@ Plus `wrapMastraRerank(rerank)` for the `@mastra/rag` `rerank()` function → **
 - Do NOT manually wrap Mastra methods in `span()`/`trace()` on top of `wrapMastra` — that double-traces.
 - All lifecycle calls are async: `await init()`, `await flush()`, `await shutdown()`.
 - Never hardcode API keys — use `process.env`.
-- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint: 'https://eu.ingest.neatlogs.com'` in `init()`; for other managed projects, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`.
 
 ## Safety gate
 

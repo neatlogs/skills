@@ -41,7 +41,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - Do NOT wrap a single module call in `@span`/`trace` — the CHAIN span is created by the hook. Use `@span` for YOUR orchestration only.
 - The DSPy hooks own module, LLM, and retriever spans. Do NOT add a manual `trace(kind="LLM")`, LLM decorator, or provider instrumentor around DSPy-owned model calls.
 - Never hardcode API keys — use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `import neatlogs` at module top level.
 
 ## Safety gate

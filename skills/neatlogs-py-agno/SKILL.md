@@ -38,7 +38,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - Wrap each Agent/Team/Workflow you want traced: `agent = neatlogs.wrap(agent)`. Returns the same instance.
 - `wrap()` creates the AGENT/LLM/TOOL spans — do NOT also wrap a single `agent.run()` in `@span`/`trace`. Use `@span` for YOUR orchestration only.
 - Never hardcode API keys — use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `import neatlogs` at module top level.
 
 ## Safety gate

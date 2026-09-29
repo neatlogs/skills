@@ -41,7 +41,7 @@ If the project is a **Next.js** app (it has `next.config.*` / `app/` route handl
 - Neatlogs supports AI SDK v6 and v7 (`ai >=6 <8`). Keep using `wrapAISDK(ai)` in both versions; it selects v6's `experimental_telemetry` or v7's `telemetry` automatically.
 - AI SDK v7 requires Node.js 22+. Its `@ai-sdk/otel` adapter is an optional dependency of `neatlogs` and installs automatically unless optional dependencies are disabled.
 - Never hardcode API keys — use `process.env`.
-- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint: 'https://eu.ingest.neatlogs.com'` in `init()`; for other managed projects, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`.
 
 ## Safety gate
 

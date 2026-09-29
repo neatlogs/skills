@@ -44,7 +44,7 @@ agent("Hello")
 - Strands native telemetry owns AGENT/LLM/TOOL spans and `strands_hooks()` only enriches them. Do NOT add manual LLM/tool decorators, provider wrappers, or spans around a single `agent(...)` call. Use manual spans only for meaningful surrounding orchestration.
 - Strands ships `BedrockModel`; ensure AWS creds + region are set.
 - Never hardcode keys/credentials. `import neatlogs` at module top level.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 
 ## Safety gate
 

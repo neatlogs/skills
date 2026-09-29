@@ -119,7 +119,7 @@ go get github.com/neatlogs/neatlogs-go/contrib/adk     # only if using Google AD
 - Session & end-user identity is per-request — set it with `neatlogs.Identify(ctx, ...)`, NEVER on `Init`. It rides on `ctx`. See step 6.
 - Pass the `ctx` from `Identify` / `Trace` / `StartLLMSpan` down into whatever runs the turn — Go propagates identity and parent-span through `context.Context`.
 - Never hardcode the API key; use `os.Getenv`.
-- For managed Neatlogs, omit `Endpoint` and `NEATLOGS_ENDPOINT`; the SDK already exports to `https://ingest.neatlogs.com`. Preserve an explicit endpoint only for a confirmed self-hosted deployment.
+- For EU projects, set `Endpoint: "https://eu.ingest.neatlogs.com"` in `neatlogs.Config`. For other managed projects, omit `Endpoint` and `NEATLOGS_ENDPOINT`. Preserve an explicit self-hosted endpoint.
 - **Multiple independent workflows in one service?** `Config.WorkflowName` is process-wide and single-shot. At each independent feature entry point, start a parentless `workflow` span with the canonical per-root override — `neatlogs.StartSpan(ctx, name, "workflow", attribute.String("neatlogs.workflow.name", name))` — so each fresh request/job becomes a distinct dashboard workflow. See the `neatlogs-multi-workflow` skill.
 
 ## `neatlogs.Init()` Config Reference
@@ -127,7 +127,7 @@ go get github.com/neatlogs/neatlogs-go/contrib/adk     # only if using Google AD
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `APIKey` | `string` | `NEATLOGS_API_KEY` env | Auth key. Empty (after env fallback) → export disabled, spans dropped |
-| `Endpoint` | `string` | `NEATLOGS_ENDPOINT`, then `https://ingest.neatlogs.com` | Self-hosted OTLP/HTTP base URL. Omit for managed Neatlogs |
+| `Endpoint` | `string` | `NEATLOGS_ENDPOINT`, then `https://ingest.neatlogs.com` | OTLP/HTTP base URL; set to `https://eu.ingest.neatlogs.com` for EU projects. |
 | `WorkflowName` | `string` | caller source path, then `neatlogs-app` | Labels this service/run |
 | `Tags` | `[]string` | `nil` | Attached to every span as a resource attribute |
 | `Debug` | `bool` | `false` | Verbose diagnostics on stderr |

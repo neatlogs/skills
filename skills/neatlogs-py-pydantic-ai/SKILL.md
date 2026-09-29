@@ -44,7 +44,7 @@ The wrapper's AGENT/LLM/TOOL spans nest correctly under application-owned orches
 - Wrap EVERY `Agent` instance whose runs you want traced: `agent = neatlogs.wrap(agent)`. `wrap()` returns the same instance (also patches in place); use the returned reference.
 - `wrap()` already creates the AGENT/LLM/TOOL spans — do NOT also wrap a single `agent.run()` in `@span`/`trace`. Use `@span` only for YOUR surrounding orchestration functions.
 - Never hardcode API keys — use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `import neatlogs` at module top level, never inside functions.
 - Minimal edits — add wrap()/decorators + imports, don't reformat.
 
