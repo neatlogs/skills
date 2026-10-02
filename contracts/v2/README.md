@@ -2,7 +2,7 @@
 
 This directory is the public, language-neutral source of truth for telemetry captured by NeatLogs SDKs and accepted by NeatLogs ingestion adapters. The canonical artifact is [`neatlogs-telemetry.schema.json`](neatlogs-telemetry.schema.json).
 
-Contract version: `2.0.0`  
+Contract version: `2.1.0`  
 Envelope `schema_version`: `2`  
 Canonical namespace: `neatlogs.v2.*`  
 Default SDK transport: OTLP HTTP/protobuf
