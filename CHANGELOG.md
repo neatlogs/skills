@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-10-02
+
+### Changed
+
+- Versioned the canonical telemetry contract at 2.1.0 with the additive `EVALUATOR` kind and `neatlogs.evaluator.*` namespace.
+
 ## [1.2.10] - 2026-09-25
 
 ### Changed
