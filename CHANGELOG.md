@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-09-25
+
+### Changed
+
+- Added EU ingest endpoint guidance for SDK setup, direct HTTP, and OTLP/gRPC examples.
+
 ## [1.2.9] - 2026-09-17
 
 ### Changed
@@ -91,7 +97,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Fixed guidance that could expose secrets or copy user environment details into skills, logs, examples, or generated instrumentation.
 - Fixed legacy `neatlogs.retrieval.*` naming in favor of the canonical `neatlogs.retriever.*` namespace.
 
-[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.9...HEAD
+[Unreleased]: https://github.com/neatlogs/skills/compare/skills-v1.2.10...HEAD
+[1.2.10]: https://github.com/neatlogs/skills/compare/skills-v1.2.9...skills-v1.2.10
 [1.2.9]: https://github.com/neatlogs/skills/compare/skills-v1.2.8...skills-v1.2.9
 [1.2.8]: https://github.com/neatlogs/skills/compare/skills-v1.2.7...skills-v1.2.8
 [1.2.7]: https://github.com/neatlogs/skills/compare/skills-v1.2.6...skills-v1.2.7

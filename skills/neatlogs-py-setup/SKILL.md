@@ -55,7 +55,7 @@ Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custo
 - `neatlogs.init()` MUST execute BEFORE any LLM library imports and BEFORE the client/agent is constructed/wrapped.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`, `@tool`) — closest to `def`.
 - Minimal edits only. Add wrap()/handler/decorators + imports. Do not reformat, add comments, or refactor.
 

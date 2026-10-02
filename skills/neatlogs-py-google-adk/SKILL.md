@@ -37,7 +37,7 @@ Combine with `@neatlogs.span` / `neatlogs.trace` / `neatlogs.log` for your own o
 - Do NOT wrap a single `runner.run_async()` loop in `@span`/`trace` — `wrap()` already opens the WORKFLOW span. Use `@span` for YOUR orchestration only.
 - The wrapped runner is the capture owner for the ADK run and its model/tool metadata. Do NOT add manual LLM/tool decorators or a second provider/framework instrumentor inside that run.
 - Never hardcode API keys — use `os.getenv()`. ADK reads `GOOGLE_API_KEY` (set `GOOGLE_GENAI_USE_VERTEXAI=0` for AI-Studio keys).
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `import neatlogs` at module top level.
 
 ## Safety gate

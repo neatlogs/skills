@@ -52,7 +52,7 @@ AGENT  pi_agent.run                  (agent_start → agent_end)
 - Do NOT manually wrap `agent.prompt()` in `span()`/`trace()` on top of `piAgentHooks` — that double-traces. Nesting a wrapped agent INSIDE your own `span()` is fine and correct: the AGENT span parents to it.
 - All lifecycle calls are async: `await init()`, `await flush()`, `await shutdown()`.
 - Never hardcode API keys — use `process.env`.
-- For managed Neatlogs, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint: 'https://eu.ingest.neatlogs.com'` in `init()`; for other managed projects, omit `endpoint`, `baseUrl`, and `NEATLOGS_ENDPOINT`.
 
 ## Safety gate
 

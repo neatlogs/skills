@@ -59,7 +59,7 @@ the same class-level patch, so prefer the `instrumentations=[...]` form.
   provider client again. Manual spans are only for app-owned surrounding
   orchestration or unsupported calls outside Hermes.
 - Never hardcode API keys — use `os.getenv()`.
-- For managed Neatlogs, omit `endpoint` and `NEATLOGS_ENDPOINT`; the SDK already uses `https://ingest.neatlogs.com`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `import neatlogs` at module top level.
 
 ## Safety gate
