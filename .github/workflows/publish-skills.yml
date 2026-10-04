@@ -1,22 +1,12 @@
-name: Publish Skills
+name: Weekly Skills release
 
 on:
-  push:
-    paths:
-      - 'skills/**'
-      - 'contracts/**'
-      - '.claude-plugin/plugin.json'
-      - '.claude-plugin/marketplace.json'
-      - 'CHANGELOG.md'
-      - 'requirements-ci.txt'
-      - 'scripts/validate-skills.py'
-      - '.github/workflows/publish-skills.yml'
-    branches:
-      - main
+  schedule:
+    - cron: '41 8 * * 1'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: publish-skills
@@ -24,84 +14,150 @@ concurrency:
 
 jobs:
   publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      - name: Resolve release version
-        id: release
-        run: |
-          set -euo pipefail
-          version=$(node -p "require('./.claude-plugin/plugin.json').version")
-          test -n "$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=skills-v$version" >> "$GITHUB_OUTPUT"
-          echo "Publishing skills version $version"
-
-      - name: Refuse release tag reuse
-        env:
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "::error::Release tag ${RELEASE_TAG} already exists; bump the plugin version."
-            exit 1
-          fi
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
+
+      - name: Plan the weekly release
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/release/weekly.py --apply > "$RUNNER_TEMP/release-plan.json"
+          cat "$RUNNER_TEMP/release-plan.json"
+          action=$(jq -r .action "$RUNNER_TEMP/release-plan.json")
+          version=$(jq -r .version "$RUNNER_TEMP/release-plan.json")
+          commit=$(jq -r '.commit // false' "$RUNNER_TEMP/release-plan.json")
+          retry=false
+          # A previous run may have created the tag but failed before uploading
+          # the GitHub Release. Retry that exact version without bumping again.
+          if [[ "$action" == skip ]] && ! gh release view "skills-v${version}" >/dev/null 2>&1; then
+            action=publish
+            retry=true
+          fi
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "retry=$retry" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact tagged source for a failed Release upload
+        if: steps.plan.outputs.retry == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+        run: git checkout --detach "skills-v${RELEASE_VERSION}"
+
+      - name: Check release App configuration
+        if: steps.plan.outputs.action == 'publish'
+        shell: bash
+        env:
+          RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          test -n "$RELEASE_APP_ID" || { echo 'RELEASE_APP_ID is missing' >&2; exit 1; }
+          test -n "$RELEASE_APP_PRIVATE_KEY" || { echo 'RELEASE_APP_PRIVATE_KEY is missing' >&2; exit 1; }
 
       - name: Validate release inputs
+        if: steps.plan.outputs.action == 'publish'
         run: |
           python -m pip install -r requirements-ci.txt
           python scripts/validate-skills.py
           python -m pytest -q
 
-      - name: Package skills
+      - name: Create a repository-scoped release token
+        if: steps.plan.outputs.action == 'publish'
+        id: release-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Commit version and tag exact release source
+        if: steps.plan.outputs.action == 'publish'
+        shell: bash
+        env:
+          RELEASE_TOKEN: ${{ steps.release-token.outputs.token }}
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+          RELEASE_COMMIT: ${{ steps.plan.outputs.commit }}
         run: |
+          set -euo pipefail
+          git config user.name 'neatlogs-release[bot]'
+          git config user.email 'neatlogs-release[bot]@users.noreply.github.com'
+          git remote set-url origin "https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [[ "$RELEASE_COMMIT" == true ]]; then
+            git add .claude-plugin/plugin.json .claude-plugin/marketplace.json contracts/launch-support-manifest.json
+            git diff --cached --check
+            git commit -m "chore(release): skills ${RELEASE_VERSION}"
+            git push origin HEAD:refs/heads/main
+          fi
+          git diff --exit-code
+          tag="skills-v${RELEASE_VERSION}"
+          if git rev-parse --verify "refs/tags/${tag}^{commit}" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$tag")" = "$(git rev-parse HEAD)" || {
+              echo "Existing ${tag} points to another commit" >&2; exit 1;
+            }
+          else
+            git tag -a "$tag" -m "Skills ${RELEASE_VERSION}"
+          fi
+          git push origin "refs/tags/${tag}"
+
+      - name: Package skills
+        if: steps.plan.outputs.action == 'publish'
+        shell: bash
+        run: |
+          set -euo pipefail
           cd skills
           for dir in */; do
-            if [ -f "${dir}SKILL.md" ]; then
+            if [[ -f "${dir}SKILL.md" ]]; then
               skill_id="${dir%/}"
-              zip -r "${skill_id}.zip" "$dir"
-              echo "Packaged: ${skill_id}.zip"
+              zip -qr "${skill_id}.zip" "$dir"
+              unzip -tq "${skill_id}.zip"
             fi
           done
 
       - name: Generate skill-menu.json
+        if: steps.plan.outputs.action == 'publish'
+        shell: bash
         env:
-          SKILLS_VERSION: ${{ steps.release.outputs.version }}
+          SKILLS_VERSION: ${{ steps.plan.outputs.version }}
         run: |
+          set -euo pipefail
           cd skills
           base="https://github.com/neatlogs/skills/releases/latest/download"
-          # Emit one menu entry per skill dir that has a SKILL.md, so the menu
-          # always stays in sync with the published .zip artifacts. The "name"
-          # is read from the SKILL.md frontmatter `description` (falls back to id).
           entries=""
           for dir in */; do
-            [ -f "${dir}SKILL.md" ] || continue
+            [[ -f "${dir}SKILL.md" ]] || continue
             skill_id="${dir%/}"
             name=$(grep -m1 '^description:' "${dir}SKILL.md" | sed 's/^description:[[:space:]]*//' | tr -d '"' | cut -c1-80)
-            [ -z "$name" ] && name="$skill_id"
-            # JSON-escape the name (quotes/backslashes)
+            [[ -n "$name" ]] || name="$skill_id"
             name=$(printf '%s' "$name" | sed 's/\\/\\\\/g; s/"/\\"/g')
-            [ -n "$entries" ] && entries="${entries},"
+            [[ -z "$entries" ]] || entries="${entries},"
             entries="${entries}{\"id\":\"${skill_id}\",\"name\":\"${name}\",\"downloadUrl\":\"${base}/${skill_id}.zip\"}"
           done
           printf '{"version":"%s","categories":{"setup":[%s]}}' "$SKILLS_VERSION" "$entries" > skill-menu.json
-          echo "Generated skill-menu.json:"
-          cat skill-menu.json | python3 -m json.tool
+          python3 -m json.tool skill-menu.json >/dev/null
 
-      - name: Create/update release
+      - name: Create the GitHub Release
+        if: steps.plan.outputs.action == 'publish'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: Skills v${{ steps.release.outputs.version }}
+          tag_name: skills-v${{ steps.plan.outputs.version }}
+          name: Skills v${{ steps.plan.outputs.version }}
           body: Auto-published NeatLogs skill packages for coding agents
           files: |
             skills/*.zip
             skills/skill-menu.json
           make_latest: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
