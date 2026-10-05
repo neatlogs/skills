@@ -204,14 +204,15 @@ jobs:
       - name: Send release notification
         shell: bash
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.COMPAT_SLACK_WEBHOOK_URL }}
+          # Incoming webhooks are channel-bound; configure this one for #released-artifacts (C0C6P2PU1UN).
+          SLACK_WEBHOOK_URL: ${{ secrets.RELEASE_SLACK_WEBHOOK_URL }}
           RELEASE_VERSION: ${{ needs.publish.outputs.version }}
           RELEASE_URL: ${{ needs.publish.outputs.release_url }}
           ZIP_COUNT: ${{ needs.publish.outputs.zip_count }}
         run: |
           set -euo pipefail
           if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
-            echo '::error::COMPAT_SLACK_WEBHOOK_URL is missing; the Skills release is published, but Slack was not notified.'
+            echo '::error::RELEASE_SLACK_WEBHOOK_URL is missing; the Skills release is published, but Slack was not notified.'
             exit 1
           fi
           run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
