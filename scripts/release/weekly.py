@@ -1,4 +1,4 @@
-"""Plan and optionally apply the next weekly Skills release."""
+"""Plan and optionally apply the next daily Skills release."""
 from __future__ import annotations
 
 import argparse
@@ -84,5 +84,5 @@ if __name__ == "__main__":
         args = parser.parse_args()
         print(json.dumps(plan(args.apply), sort_keys=True))
     except (ValueError, RuntimeError, subprocess.CalledProcessError, OSError) as error:
-        print(f"weekly Skills release planning failed: {error}", file=sys.stderr)
+        print(f"daily Skills release planning failed: {error}", file=sys.stderr)
         sys.exit(1)
