@@ -805,8 +805,9 @@ def validate_publishing_workflow(errors: list[str]) -> None:
         errors.append(f"publishing workflow is unreadable: {exc}")
         return
     for required in (
-        "git ls-remote --exit-code --tags origin",
-        "Release tag ${RELEASE_TAG} already exists",
+        "git rev-parse --verify",
+        "Existing ${tag} points to another commit",
+        "gh release view",
         "python scripts/validate-skills.py",
         "python -m pytest -q",
     ):
