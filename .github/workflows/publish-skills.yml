@@ -17,6 +17,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      published: ${{ steps.verify-release.outputs.published }}
+      version: ${{ steps.plan.outputs.version }}
+      release_url: ${{ steps.verify-release.outputs.release_url }}
+      zip_count: ${{ steps.verify-release.outputs.zip_count }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -161,3 +166,63 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
+
+      - name: Verify the published release and assets
+        if: steps.plan.outputs.action == 'publish'
+        id: verify-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="skills-v${RELEASE_VERSION}"
+          release=$(gh release view "$tag" --json url,tagName,isDraft,isPrerelease,assets)
+          jq -e --arg tag "$tag" '
+            .tagName == $tag and
+            .isDraft == false and
+            .isPrerelease == false and
+            any(.assets[]; .name == "skill-menu.json") and
+            any(.assets[]; .name | endswith(".zip"))
+          ' <<< "$release" >/dev/null
+          remote_tag=$(git ls-remote --tags origin "refs/tags/${tag}" | cut -f1)
+          test -n "$remote_tag"
+          test "$remote_tag" = "$(git rev-parse "refs/tags/${tag}")"
+          test "$(git rev-list -n 1 "$tag")" = "$(git rev-parse HEAD)"
+          echo "published=true" >> "$GITHUB_OUTPUT"
+          echo "release_url=$(jq -r .url <<< "$release")" >> "$GITHUB_OUTPUT"
+          echo "zip_count=$(jq '[.assets[].name | select(endswith(".zip"))] | length' <<< "$release")" >> "$GITHUB_OUTPUT"
+
+  notify-slack:
+    name: Notify Slack of published Skills release
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send release notification
+        shell: bash
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.COMPAT_SLACK_WEBHOOK_URL }}
+          RELEASE_VERSION: ${{ needs.publish.outputs.version }}
+          RELEASE_URL: ${{ needs.publish.outputs.release_url }}
+          ZIP_COUNT: ${{ needs.publish.outputs.zip_count }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo '::error::COMPAT_SLACK_WEBHOOK_URL is missing; the Skills release is published, but Slack was not notified.'
+            exit 1
+          fi
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          printf -v message ':white_check_mark: *Skills release skills-v%s published*\n<%s|GitHub Release> · %s skill ZIPs and skill-menu.json\n<%s|Release workflow>' \
+            "$RELEASE_VERSION" "$RELEASE_URL" "$ZIP_COUNT" "$run_url"
+          payload=$(jq -n --arg text "$message" '{text: $text}')
+          response=$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 15 \
+            --header 'Content-type: application/json' \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL")
+          if [[ "$response" != ok ]]; then
+            echo "::error::Slack did not acknowledge the release notification: $response"
+            exit 1
+          fi
