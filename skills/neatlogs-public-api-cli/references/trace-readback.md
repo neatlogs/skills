@@ -31,6 +31,10 @@ ceiling is reached, label the result partial and do not claim all parents or
 spans were checked. A trace summary count can be compared with the collected
 spans only after complete pagination and when the same projection is used.
 
+For normal post-instrumentation readback, this API and the CLI can check the
+finalized trace that users see and its canonical hierarchy. The check is
+limited to the fields the public response exposes.
+
 The public span list reads the finalized [`spans_simplified` projection](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/services/PublicObservabilityRead/span-repository.ts#L158).
 The finalizer can [repair parent links and normalize roots](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/workers/trace-finalizer/simplified-view.ts#L5759),
 including [attaching extra parentless spans beneath one canonical root](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/workers/trace-finalizer/span-tree.ts#L195).

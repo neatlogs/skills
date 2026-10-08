@@ -67,6 +67,10 @@ Confirm the exact trace ID and project, a finalized status, expected span
 types and parent links, and the user's requested behavior. Zero token usage
 alone is not a regression: some providers do not report token counts.
 
+The Public API or CLI is suitable for checking the **finalized trace visible to
+users** after instrumentation, including its canonical root and parent
+hierarchy once pagination is complete.
+
 "All spans," root, and parent checks here cover the **canonical finalized
 public projection**, not the originally emitted span topology. Finalization
 can repair parent links and attach extra roots beneath one root, so a single
