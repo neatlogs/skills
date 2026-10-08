@@ -39,6 +39,8 @@ lifecycle.
 Verify the exact resulting trace through the target project's normal product
 trace view or supported public read path. Require a finalized trace with one
 meaningful root, the expected semantic hierarchy, and no duplicate operations.
+For terminal readback use the separate `neatlogs-public-api-cli` skill, whose
+app-origin Public API and authorization differ from the ingest route.
 Do not infer end-to-end success from source inspection, local serialization,
 exporter flush, or HTTP acceptance. Keep credentials in process environment or
 client secret storage, never in command arguments, output, files, or agent

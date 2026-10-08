@@ -102,6 +102,27 @@
       "homepage": "https://neatlogs.com",
       "repository": "https://github.com/neatlogs/skills",
       "license": "MIT"
+    },
+    {
+      "name": "neatlogs-public-api-cli",
+      "source": ".",
+      "description": "Use the NeatLogs Public API and neatlogs-cli to read project-scoped traces and other supported cloud resources safely.",
+      "version": "1.2.11",
+      "category": "observability",
+      "keywords": [
+        "neatlogs",
+        "public-api",
+        "cli",
+        "traces",
+        "observability"
+      ],
+      "author": {
+        "name": "NeatLogs",
+        "email": "neatlogs-support@neatlogs.com"
+      },
+      "homepage": "https://neatlogs.com",
+      "repository": "https://github.com/neatlogs/skills",
+      "license": "MIT"
     }
   ]
 }
