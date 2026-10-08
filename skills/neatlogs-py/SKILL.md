@@ -296,6 +296,11 @@ After local Doctor passes and the requested instrumentation is in place:
 4. Through the target project's normal product trace view or supported public
    read path, verify that exact run is finalized, has one meaningful root and
    the expected semantic hierarchy, and contains no duplicate operation spans.
+   If using a terminal public read, follow the separate
+   `neatlogs-public-api-cli` skill; its app-origin credentials and
+   `neatlogs traces get` command are not the SDK's ingest key or Doctor. Its
+   root and parent checks cover the canonical public projection, not emitted
+   span topology.
 
 Keep project credentials in the process environment or client secret storage;
 never put them in commands, output, files, or agent context. Do not use a

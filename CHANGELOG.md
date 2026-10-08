@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added a Public API and CLI skill aligned with the `neatlogs-app` staging contract: app-origin authentication, the separate `neatlogs-cli` package, safe trace reads, cursor pagination, and terminal trace states.
+
+### Changed
+
+- Pointed the primary SDK and direct-ingest skills to the supported public trace-read skill for post-instrumentation verification.
+
 ## [1.2.11] - 2026-10-02
 
 ### Changed

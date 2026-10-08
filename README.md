@@ -16,6 +16,7 @@ The installed SDK Doctor output contract lives in [`contracts/doctor/v2`](./cont
 | [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — wrappers, handlers, hooks, processors, and custom spans |
 | [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — Gemini via `WrapGenAI`, direct/unsupported providers via explicit helpers, custom boundaries, and per-request identity |
 | [`neatlogs-ingest`](./skills/neatlogs-ingest/) | Any other language | Send nested JSON to HTTP ingest (`POST /v1/trace`) or configure OTLP/gRPC when OpenTelemetry already exists |
+| [`neatlogs-public-api-cli`](./skills/neatlogs-public-api-cli/) | Public API / terminal | Read project traces and use the supported `neatlogs-cli` with project-scoped authorization |
 
 ## Trace Codex sessions with `@neatlogs/codex`
 
