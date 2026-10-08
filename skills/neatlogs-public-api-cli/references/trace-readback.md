@@ -31,6 +31,15 @@ ceiling is reached, label the result partial and do not claim all parents or
 spans were checked. A trace summary count can be compared with the collected
 spans only after complete pagination and when the same projection is used.
 
+The public span list reads the finalized [`spans_simplified` projection](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/services/PublicObservabilityRead/span-repository.ts#L158).
+The finalizer can [repair parent links and normalize roots](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/workers/trace-finalizer/simplified-view.ts#L5759),
+including [attaching extra parentless spans beneath one canonical root](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/src/workers/trace-finalizer/span-tree.ts#L195).
+Therefore, complete pagination covers all available *public projected* spans;
+one public root or a valid public parent tree does not prove the emitted span
+topology had one root or those same parent links. If original emitted topology
+matters, inspect raw spans only with separate authorization or mark that aspect
+unverified. A normal metadata read need not be widened to payload access.
+
 ## Interpret the result
 
 1. Match the exact trace ID and selected project to the workflow being tested.
@@ -38,8 +47,9 @@ spans only after complete pagination and when the same projection is used.
    projection is not ready) as incomplete; retry for a bounded period.
    `finalizationStatus: "dlq"` is a failure requiring investigation, not
    another flush. A null finalization status is unknown.
-3. Once finalized, inspect the expected semantic spans and parent IDs. The
-   public response is deliberately safe metadata; it omits arbitrary span
+3. Once finalized, inspect the expected semantic spans and parent IDs in the
+   canonical public projection. The public response is deliberately safe
+   metadata; it omits arbitrary span
    attributes, raw input/output, and internal storage details. Use a
    separately authorized payload read only when the user's task needs it.
 4. `totalTokens: 0` does not by itself prove an SDK regression. Token usage

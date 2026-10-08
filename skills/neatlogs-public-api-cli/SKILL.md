@@ -67,6 +67,15 @@ Confirm the exact trace ID and project, a finalized status, expected span
 types and parent links, and the user's requested behavior. Zero token usage
 alone is not a regression: some providers do not report token counts.
 
+"All spans," root, and parent checks here cover the **canonical finalized
+public projection**, not the originally emitted span topology. Finalization
+can repair parent links and attach extra roots beneath one root, so a single
+root in a complete public read does not prove that only one root was emitted.
+If the task requires proof of emitted root or parent structure, use a
+separately authorized raw-span read; if that is unavailable, report the emitted
+topology as unverified. Routine safe metadata reads do not require raw or
+payload access.
+
 When a trace is pending, retry a bounded number of times. A dead-lettered
 trace requires investigation; do not describe it as simply waiting for a
 flush. Report missing access or an unavailable API as a blocker rather than
