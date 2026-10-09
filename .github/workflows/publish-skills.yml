@@ -157,6 +157,7 @@ jobs:
         if: steps.plan.outputs.action == 'publish'
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ steps.release-token.outputs.token }}
           tag_name: skills-v${{ steps.plan.outputs.version }}
           name: Skills v${{ steps.plan.outputs.version }}
           body: Auto-published NeatLogs skill packages for coding agents
@@ -164,8 +165,6 @@ jobs:
             skills/*.zip
             skills/skill-menu.json
           make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
 
       - name: Verify the published release and assets
         if: steps.plan.outputs.action == 'publish'
