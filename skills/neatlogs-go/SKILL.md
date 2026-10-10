@@ -245,6 +245,20 @@ success from installation, local logs, exporter flush, HTTP 2xx, or any
 uncorrelated trace. Probe success proves the controlled path only. Verify the
 real user workflow separately through the completion gate below.
 
+## Public CLI credentials after SDK verification
+
+The project key supports SDK Doctor probe readback without public CLI login.
+If it is the only credential available, report optional CLI readback as
+**waiting on a human** and verify the application's exact trace separately in
+the dashboard. A controlled probe is not proof of the real workflow.
+
+For terminal readback, follow the `neatlogs-public-api-cli` skill or
+https://docs.neatlogs.com/cli if that skill is unavailable. Its 0.2.1 guidance
+uses explicit dashboard host, OAuth profile or service-token selection, and
+project discovery before project-scoped reads. Keep the SDK key available to
+the app; it must not override CLI authentication. Check publication and installed
+version before using 0.2.1 options; the CLI skill documents the 0.2.0 fallback.
+
 ## Completion gate
 
 After local Doctor passes and the requested instrumentation is in place:
