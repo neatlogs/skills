@@ -10,8 +10,10 @@ application or sending telemetry, use the Python, TypeScript, Go, or direct
 ingest skill instead. The SDK ingest credential and endpoint are separate from
 the Public API host and its authorization rules.
 
+This guidance targets **neatlogs-cli 0.2.1**, pending npm publication. Check the registry before installing it; do not claim a successful upgrade when that version is unavailable. The 0.2.0 compatibility path is in [authentication and operation selection](references/auth-and-operations.md).
+
 This guidance follows `neatlogs/neatlogs-app` `staging` at
-`7253b22987c749cb4b1b50c063f6903c313273d3`. Before relying on a newly
+`8599c674ae103f39f98ace928f37bb553b877b01`. Before relying on a newly
 deployed capability, inspect the installed CLI's offline `schema show` output
 and confirm the target deployment enables the operation. A schema entry does
 not prove that a gated operation is enabled on the server.
@@ -40,25 +42,64 @@ before configuring a profile, token, or direct HTTP request. Read
 
 ## Read a trace through the CLI
 
-For a human, use Node.js 22 or 24, install the published standalone CLI,
-verify `neatlogs --version`, then configure an app-origin profile and log in:
+For a human, use Node.js 22 or 24 and verify which CLI is installed. Choose a
+profile for the project's dashboard. Inspect existing profiles before login;
+reuse a name only if it is unused or already bound to that exact host. For EU,
+change both the host and profile below to `https://eu.app.neatlogs.com` and
+`neatlogs-eu`. Do not rebind an authenticated profile from another dashboard.
 
 ```bash
-npm install --global neatlogs-cli@latest
+npm view neatlogs-cli@0.2.1 version
+npm install --global neatlogs-cli@0.2.1
 neatlogs --version
-neatlogs profile set work --host https://app.neatlogs.com --project <project-uuid>
-neatlogs profile use work
-neatlogs auth login --scope observability:read
-neatlogs traces get <trace-id> --json
-neatlogs traces spans list <trace-id> --limit 50 --json
+NEATLOGS_CLI_HOST='https://app.neatlogs.com'
+NEATLOGS_CLI_PROFILE='neatlogs-us'
+neatlogs --host "$NEATLOGS_CLI_HOST" profile list
+neatlogs --host "$NEATLOGS_CLI_HOST" --profile "$NEATLOGS_CLI_PROFILE" \
+  --credential-source profile auth login --device \
+  --scope context:read observability:read offline_access
+# Continue after the user approves the displayed code in their browser.
+env -u NEATLOGS_PROJECT_ID neatlogs --host "$NEATLOGS_CLI_HOST" \
+  --profile "$NEATLOGS_CLI_PROFILE" --credential-source profile projects list
+NEATLOGS_CLI_PROJECT='<project-uuid>'
+neatlogs --host "$NEATLOGS_CLI_HOST" --profile "$NEATLOGS_CLI_PROFILE" \
+  --credential-source profile --project "$NEATLOGS_CLI_PROJECT" whoami --json
+neatlogs --host "$NEATLOGS_CLI_HOST" --profile "$NEATLOGS_CLI_PROFILE" \
+  --credential-source profile --project "$NEATLOGS_CLI_PROJECT" traces list --limit 5 --json
+neatlogs --host "$NEATLOGS_CLI_HOST" --profile "$NEATLOGS_CLI_PROFILE" \
+  --credential-source profile --project "$NEATLOGS_CLI_PROJECT" traces get '<trace-id>' --json
+neatlogs --host "$NEATLOGS_CLI_HOST" --profile "$NEATLOGS_CLI_PROFILE" \
+  --credential-source profile --project "$NEATLOGS_CLI_PROJECT" traces spans list '<trace-id>' --limit 50 --json
 ```
 
-For an unattended agent or CI job, use a dedicated service account with the
-minimum project binding and `observability:read` scope. Supply its token from
-a secret store as `NEATLOGS_TOKEN`, its dashboard origin as `NEATLOGS_HOST`,
-and its selected project UUID as `NEATLOGS_PROJECT_ID`; do not perform a human
-OAuth login in automation. Do not put credentials in command arguments, chat,
-repository files, or output.
+`projects list` must receive neither `--project` nor `NEATLOGS_PROJECT_ID`;
+`env -u` excludes the variable only from that process on POSIX shells. Use
+equivalent process isolation in other shells. Confirm the project UUID from
+discovery before project-scoped `whoami` and trace reads. Keep the same host,
+profile and credential source for subsequent reads, including pagination.
+
+For unattended agents and CI, use an expiring service-account token from a
+secret store in `NEATLOGS_TOKEN`, with the minimum project binding,
+`context:read` for discovery/identity, and `observability:read` for traces.
+Use `--credential-source token` instead of `profile`, skip human OAuth login,
+and keep the explicit host and project selection. The SDK project's
+`NEATLOGS_API_KEY` stays available to the application and does not override
+either explicit credential source. Do not put tokens in command arguments,
+chat, repository files, or output.
+
+With only an SDK project key, use the installed same-language SDK's documented
+`doctor --local` and `doctor --probe` for controlled capture and hosted
+readback. These are SDK commands, not commands of `neatlogs-cli`. Mark optional
+CLI readback **waiting on a human** until OAuth approval or a suitable service
+token is available. A probe pass is separate from verifying the application's
+actual trace; ask for dashboard verification if public-read credentials are
+unavailable.
+
+In 0.2.1, `auth status` verifies with the public API and needs `context:read`
+but no selected project. In 0.2.0 it can report `authenticated: true` merely
+because an SDK key is present. Use project-scoped `whoami` and an actual trace
+read to verify access. See the authentication reference for recovery from
+`MISSING_HOST`, `MISSING_PROJECT_ID`, credential failures and host mismatches.
 
 `traces get` returns safe trace metadata. It does **not** return the full span
 tree. Follow `data.page.nextCursor` across `traces spans list` pages if the
@@ -95,5 +136,5 @@ skills, and other authorized resources; choose the exact operation and minimum
 scope for the user's task. Request or perform mutations only when the user
 authorized them and the target deployment permits them.
 
-Backend contract: [Public API v1](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/backend/docs/public-api/v1.md).
-CLI source: [command reference](https://github.com/neatlogs/neatlogs-app/blob/7253b22987c749cb4b1b50c063f6903c313273d3/cli/docs/command-reference.md).
+Backend contract: [Public API v1](https://github.com/neatlogs/neatlogs-app/blob/8599c674ae103f39f98ace928f37bb553b877b01/backend/docs/public-api/v1.md).
+CLI source: [command reference](https://github.com/neatlogs/neatlogs-app/blob/8599c674ae103f39f98ace928f37bb553b877b01/cli/docs/command-reference.md).

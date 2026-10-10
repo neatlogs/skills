@@ -8,6 +8,11 @@ Source: `neatlogs/neatlogs-app` `staging` commit
 
 ## Commands and response shapes
 
+The table shows command suffixes. First follow the skill's 0.2.1 login or
+service-token flow, then pass the same explicit `--host`, `--profile` (OAuth),
+`--credential-source` and `--project` on every read and pagination request.
+For 0.2.0 compatibility, see [authentication](auth-and-operations.md).
+
 | Need | CLI | Public API |
 | --- | --- | --- |
 | Exact trace metadata | `neatlogs traces get <trace-id> --json` | `GET /api/v1/public/traces/{traceId}` |
