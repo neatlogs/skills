@@ -12,11 +12,56 @@ concurrency:
   group: publish-skills
   cancel-in-progress: false
 
+# plan runs daily without secrets. Only when a release is due does publish wait
+# for approval in the `release` environment (main only, required reviewers),
+# which holds RELEASE_APP_PRIVATE_KEY.
 jobs:
-  publish:
+  plan:
+    name: Decide whether a release is due
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Plan without changing the tree
+        id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python scripts/release/weekly.py > "$RUNNER_TEMP/release-plan.json"
+          cat "$RUNNER_TEMP/release-plan.json"
+          action=$(jq -r .action "$RUNNER_TEMP/release-plan.json")
+          version=$(jq -r .version "$RUNNER_TEMP/release-plan.json")
+          # Same retry rule as publish: a tag without its GitHub Release is due.
+          if [[ "$action" == skip ]] && ! gh release view "skills-v${version}" >/dev/null 2>&1; then
+            action=publish
+          fi
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$action" == publish ]]; then
+            echo "Release due: skills-v${version}. Approve the \`release\` deployment to publish it." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  publish:
+    name: Publish the approved release
+    needs: plan
+    if: needs.plan.outputs.action == 'publish'
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: release
     outputs:
       published: ${{ steps.verify-release.outputs.published }}
       version: ${{ steps.plan.outputs.version }}
@@ -32,11 +77,13 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Plan the daily release
+      - name: Apply the approved plan
         id: plan
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          APPROVED_ACTION: ${{ needs.plan.outputs.action }}
+          APPROVED_VERSION: ${{ needs.plan.outputs.version }}
         run: |
           set -euo pipefail
           python scripts/release/weekly.py --apply > "$RUNNER_TEMP/release-plan.json"
@@ -50,6 +97,10 @@ jobs:
           if [[ "$action" == skip ]] && ! gh release view "skills-v${version}" >/dev/null 2>&1; then
             action=publish
             retry=true
+          fi
+          if [[ "$action" != "$APPROVED_ACTION" || "$version" != "$APPROVED_VERSION" ]]; then
+            echo "::error::The plan changed after approval (approved ${APPROVED_ACTION} ${APPROVED_VERSION}, now ${action} ${version}); rerun the workflow" >&2
+            exit 1
           fi
           echo "action=$action" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
