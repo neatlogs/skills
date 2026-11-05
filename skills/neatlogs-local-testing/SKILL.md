@@ -21,10 +21,9 @@ Create the experiment name and goal yourself from the user's intent:
 
 ```sh
 neatlogs --json experiments create --name "<name>" --goal "<goal>" --idempotency-key "<uuid>"
-neatlogs --json experiments round --experiment "$NEATLOGS_LOCAL_EXPERIMENT_ID" --name "<round name>" --hypothesis "<intended change>" --idempotency-key "<uuid>"
 ```
 
-Use real values, not these placeholders. Save each request key before calling and reuse it if that request must be retried. Read returned IDs; set `NEATLOGS_LOCAL_EXPERIMENT_ID` and `NEATLOGS_LOCAL_ROUND_ID` in every command shell and child task environment. This links relevant CLI activity, failures and retries to the correct experiment in Neatlogs. A new hypothesis gets a new round ID.
+Use real values, not these placeholders. Save each request key before calling and reuse it if that request must be retried. Read returned IDs; set `NEATLOGS_LOCAL_EXPERIMENT_ID` in every command shell and child task environment. Set `NEATLOGS_LOCAL_ROUND_ID` after creating the prepared round below. This links relevant CLI activity, failures and retries to the correct experiment in Neatlogs. A new hypothesis gets a new round ID.
 
 Resume only when the user asks to resume a specific experiment or the current task was interrupted. Verify saved host/project/experiment IDs before restoring private state. A new prompt is not permission to resume a previous experiment automatically. Keep assistant-owned metadata such as run IDs, pins, request keys and progress credential-free in ignored, permission-restricted local state.
 
@@ -63,13 +62,27 @@ Check accuracy, grounding and goal-specific behavior. Score against a declared s
 
 Do not modify billing/credit records, weaken checks or change pass criteria to make a run succeed. Report unsupported checks and missing permissions precisely.
 
+## Save the setup and prepare a round
+
+Inspect `neatlogs experiments record --help` and `neatlogs experiments round --help`. Use only supported capabilities; older CLI/SDK builds must be updated before claiming round tracking. Save checkpoints with `neatlogs experiments record --experiment <id> --body-stdin --idempotency-key <uuid>`:
+
+- `kind: "setup"`: send `setup` with `datasetVersionId`, selected `caseIds`, `trials`, `formVersionId`, `evaluatorIds`, `detectionIds`, and `resources`. Each resource records its `kind`, `id`, `revision`, `disposition` (`created` or `reused`) and a short user-facing `reason`. Include no credentials, raw terminal output or private reasoning. The backend validates selection and freezes the grading/detection configuration.
+- Create the round using the existing `experiments round` command with its name, hypothesis and `--variants` JSON containing `A` and `B`, each with `name` and exact `changes`. The round snapshots the shared setup. Set its returned `NEATLOGS_LOCAL_ROUND_ID`.
+- `kind: "preparation"`: send `roundId`, `variant` (`A` or `B`) and `preparation` containing `state` (`preparing`, `ready` or `failed`), a brief `message` and the real `git` branch/sha when available. Mark ready only after preparing the actual agent code and settings. Each round has stable identities `(roundId, A)` and `(roundId, B)`.
+
+A changed dataset, check configuration or hypothesis requires a new setup/round; never mutate the setup frozen into earlier rounds. This tracking adds no human approval step in the Neatlogs UI.
+
 ## Run and improve
 
 Create an SDK evaluation task that invokes the actual agent with the chosen settings, retains conversation history and executes its own tools. Inspect `neatlogs evals run --help`; use supported dataset/version/case/trial/form/evaluator options. With an initialized TypeScript SDK, use `--trace-evidence` when supported. Explain other language/provider limitations rather than inventing evidence support.
 
-Run current and candidate on the same pinned cases, trials and checks. Keep separate private retry state for each run, subject to the task-data boundary above. Record actual model/prompt/tool/config changes. Hosted simulation reuses saved tool results; it cannot demonstrate new execution of the user's tools. Use real agent tasks for runtime comparisons. Respect the user's budget and tool permissions.
+Run current and candidate on the same pinned cases, trials and checks. Include `--experiment <id> --round <id> --variant A|B --attempt 1` on each `evals run`; use the matching git options when the preparation pinned a revision. Keep separate private retry state for each run, subject to the task-data boundary above. Record actual model/prompt/tool/config changes. Hosted simulation reuses saved tool results; it cannot demonstrate new execution of the user's tools. Use real agent tasks for runtime comparisons. Respect the user's budget and tool permissions.
 
 Wait for generation and grading separately. On failure, inspect the exact error and repair its cause. Retry transient failures with backoff, at most two automatic retries per unchanged failure; preserve successful answers and prevent duplicate mutations/charges. Use a supported grading retry path for saved answers instead of regenerating the whole run. Stop repeated retries for auth, quota, unsupported evidence or missing configuration and report the needed action.
+
+If B alone fails, keep successful A. Resume B with the same attempt and private state if execution is safe to resume. If a repaired task requires a new run, use the next B attempt number and a new private state file; retain the failed attempt. Do not rerun A to make the screen symmetric. An uncertain execution requires inspection before another dispatch.
+
+After each run completes, if detections were configured, record `kind: "checks"` with `roundId`, `runId` and a stable UUID `requestKey`. This queues the existing run-level detection worker against the frozen selection. Inspect `experiments get <id>` for `runAttempts[].detectionChecks`; wait for complete coverage and report failed, skipped or uncertain checks explicitly. Do not replace missing results with a pass. Retry a failed check batch with a new saved request key only after inspecting its cause; never regenerate successful agent answers for a grading or detection retry.
 
 For each iteration, keep the baseline and checks stable where comparable, state the hypothesis, and save a new round. Do not overwrite unfavorable results. If pins/checks change, mark the comparison as changed and rerun both versions as needed. Never iterate indefinitely without a user-approved time or spend budget.
 
@@ -78,5 +91,7 @@ For each iteration, keep the baseline and checks stable where comparable, state 
 Use `neatlogs evals compare <current-run> <candidate-run>` after inspecting both runs' completion and grading. Do not assume its response contains a URL. If one is returned, verify its host before opening it. Otherwise open the saved experiment from Local testing on the verified dashboard and select its run comparison. When that host supports it, the experiment route is `/experiments/local/workspace/<experiment-id>?orgId=<verified-org-id>&projectId=<verified-project-id>`; use actual returned IDs and verify the destination. If no supported browser destination is available, report the experiment/run IDs and CLI results with that navigation limitation. Keep the two environment IDs set for related CLI commands so the UI can show execution status. The activity feed represents reported Neatlogs commands, not the coding assistant's private reasoning or unrelated terminal activity.
 
 Give a report card for each round: hypothesis, model/settings, selected and completed cases, grades, detections, tool names/outcomes, tokens, latency, cost, failures and unavailable measurements. Distinguish model time from whole-agent time and generation cost from grading/tool cost. Missing measurements are not zero.
+
+Save the round using the same `experiments record` command with `kind: "result"`, `roundId` and `result` containing `runA`, `runB`, `outcome` (`goal_met`, `goal_not_met`, `tradeoff`, `incomplete`), `decision` (`continue` or `finish`) and a brief evidence-based `reason`. If using saved rechecks, include their exact `gradingBatchA`/`gradingBatchB` IDs. A blocked result may include `blocker` with stage, safe error code/message, request ID and retry timing. Retry incomplete checks and replace that incomplete assessment after recovery; completed decisions remain immutable. Results are the coding agent's assessment, not a backend guarantee of a production winner. Persist it before starting another round or finishing.
 
 Compare against the user's goal and quality constraints. Name the version and model when recommending a winner, with the supporting evidence and sample limitations. If results are incomplete or inconclusive, say so; never promise the goal will be achieved. Keep results discoverable under the experiment. Rollout, deployment, publishing and sending results to other people require separate user authorization.
