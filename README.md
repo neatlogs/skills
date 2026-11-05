@@ -23,7 +23,13 @@ The installed SDK Doctor output contract lives in [`contracts/doctor/v2`](./cont
 
 Use `neatlogs-local-testing` to guide dataset selection, real agent runs, quality checks and comparisons. Supply your own goal; the skill does not prescribe a model or target. It asks whether to use an existing dataset or fresh cases when that choice is missing.
 
-After this skill is available on your selected repository ref, install it outside your project:
+For the prerelease skill in this PR, install the selected release branch outside your project. The quoted source includes an explicit Git ref, including its slash-separated branch name:
+
+```bash
+npx skills add 'https://github.com/neatlogs/skills#shyam/local-testing-skill-20261104' --skill neatlogs-local-testing --agent codex -g
+```
+
+For an immutable release, replace that fragment with its reviewed commit SHA. After the skill is available on the default branch, the unpinned shorthand installs that branch:
 
 ```bash
 npx skills add neatlogs/skills --skill neatlogs-local-testing --agent codex -g

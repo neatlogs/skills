@@ -26,7 +26,9 @@ neatlogs --json experiments round --experiment "$NEATLOGS_LOCAL_EXPERIMENT_ID" -
 
 Use real values, not these placeholders. Save each request key before calling and reuse it if that request must be retried. Read returned IDs; set `NEATLOGS_LOCAL_EXPERIMENT_ID` and `NEATLOGS_LOCAL_ROUND_ID` in every command shell and child task environment. This links relevant CLI activity, failures and retries to the correct experiment in Neatlogs. A new hypothesis gets a new round ID.
 
-Resume only when the user asks to resume a specific experiment or the current task was interrupted. Verify saved host/project/experiment IDs before restoring private state. A new prompt is not permission to resume a previous experiment automatically. Store run IDs, pins, request keys and progress in ignored, permission-restricted local state; never include credentials.
+Resume only when the user asks to resume a specific experiment or the current task was interrupted. Verify saved host/project/experiment IDs before restoring private state. A new prompt is not permission to resume a previous experiment automatically. Keep assistant-owned metadata such as run IDs, pins, request keys and progress credential-free in ignored, permission-restricted local state.
+
+SDK resume files can also contain task outputs and exception text, including credentials embedded in an HTTP error or URL. File permissions do not sanitize that content. Before using resumable state, use sanitized test credentials/fixtures and a safe task/error boundary that preserves the behavior being tested. If faithful evidence cannot be captured safely, report the limitation instead of claiming the state is credential-free. Never print, commit or share raw resume files.
 
 ## Choose cases deliberately
 
@@ -65,7 +67,7 @@ Do not modify billing/credit records, weaken checks or change pass criteria to m
 
 Create an SDK evaluation task that invokes the actual agent with the chosen settings, retains conversation history and executes its own tools. Inspect `neatlogs evals run --help`; use supported dataset/version/case/trial/form/evaluator options. With an initialized TypeScript SDK, use `--trace-evidence` when supported. Explain other language/provider limitations rather than inventing evidence support.
 
-Run current and candidate on the same pinned cases, trials and checks. Keep separate private retry state for each run. Record actual model/prompt/tool/config changes. Hosted simulation reuses saved tool results; it cannot demonstrate new execution of the user's tools. Use real agent tasks for runtime comparisons. Respect the user's budget and tool permissions.
+Run current and candidate on the same pinned cases, trials and checks. Keep separate private retry state for each run, subject to the task-data boundary above. Record actual model/prompt/tool/config changes. Hosted simulation reuses saved tool results; it cannot demonstrate new execution of the user's tools. Use real agent tasks for runtime comparisons. Respect the user's budget and tool permissions.
 
 Wait for generation and grading separately. On failure, inspect the exact error and repair its cause. Retry transient failures with backoff, at most two automatic retries per unchanged failure; preserve successful answers and prevent duplicate mutations/charges. Use a supported grading retry path for saved answers instead of regenerating the whole run. Stop repeated retries for auth, quota, unsupported evidence or missing configuration and report the needed action.
 
@@ -73,7 +75,7 @@ For each iteration, keep the baseline and checks stable where comparable, state 
 
 ## Compare and report
 
-Use `neatlogs evals compare <current-run> <candidate-run>` after inspecting both runs' completion and grading. Open the returned comparison/experiment URL on the verified host. Keep the two environment IDs set for related CLI commands so the UI can show execution status. The activity feed represents reported Neatlogs commands, not the coding assistant's private reasoning or unrelated terminal activity.
+Use `neatlogs evals compare <current-run> <candidate-run>` after inspecting both runs' completion and grading. Do not assume its response contains a URL. If one is returned, verify its host before opening it. Otherwise open the saved experiment from Local testing on the verified dashboard and select its run comparison. When that host supports it, the experiment route is `/experiments/local/workspace/<experiment-id>?orgId=<verified-org-id>&projectId=<verified-project-id>`; use actual returned IDs and verify the destination. If no supported browser destination is available, report the experiment/run IDs and CLI results with that navigation limitation. Keep the two environment IDs set for related CLI commands so the UI can show execution status. The activity feed represents reported Neatlogs commands, not the coding assistant's private reasoning or unrelated terminal activity.
 
 Give a report card for each round: hypothesis, model/settings, selected and completed cases, grades, detections, tool names/outcomes, tokens, latency, cost, failures and unavailable measurements. Distinguish model time from whole-agent time and generation cost from grading/tool cost. Missing measurements are not zero.
 
