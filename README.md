@@ -16,7 +16,27 @@ The installed SDK Doctor output contract lives in [`contracts/doctor/v2`](./cont
 | [`neatlogs-ts`](./skills/neatlogs-ts/) | TypeScript / Node.js | Instrument TypeScript LLM apps with `neatlogs` — wrappers, handlers, hooks, processors, and custom spans |
 | [`neatlogs-go`](./skills/neatlogs-go/) | Go | Instrument Go LLM apps with `neatlogs-go` — Gemini via `WrapGenAI`, direct/unsupported providers via explicit helpers, custom boundaries, and per-request identity |
 | [`neatlogs-ingest`](./skills/neatlogs-ingest/) | Any other language | Send nested JSON to HTTP ingest (`POST /v1/trace`) or configure OTLP/gRPC when OpenTelemetry already exists |
+| [`neatlogs-local-testing`](./skills/neatlogs-local-testing/) | Agent project / CLI | Create or resume experiments, choose fresh or existing cases, run actual agents and compare quality, tools and performance |
 | [`neatlogs-public-api-cli`](./skills/neatlogs-public-api-cli/) | Public API / terminal | Read project traces and use the supported `neatlogs-cli` with project-scoped authorization |
+
+## Local agent testing
+
+Use `neatlogs-local-testing` to guide dataset selection, real agent runs, quality checks and comparisons. Supply your own goal; the skill does not prescribe a model or target. It asks whether to use an existing dataset or fresh cases when that choice is missing.
+
+For the prerelease skill in this PR, install the selected release branch outside your project. The quoted source includes an explicit Git ref, including its slash-separated branch name:
+
+```bash
+npx skills add 'https://github.com/neatlogs/skills#shyam/local-testing-skill-20261104' --skill neatlogs-local-testing --agent codex -g
+```
+
+For an immutable release, replace that fragment with its reviewed commit SHA. After the skill is available on the default branch, the unpinned shorthand installs that branch:
+
+```bash
+npx skills add neatlogs/skills --skill neatlogs-local-testing --agent codex -g
+# Claude Code: use --agent claude-code
+```
+
+The copied local-testing prompt can have your coding assistant check and install the skill for you. Copying text alone does not install anything. The assistant must read the installed `SKILL.md` before continuing; a new session is not needed for that explicit read. Keep browser sign-in approval separate from skill installation.
 
 ## Trace Codex sessions with `@neatlogs/codex`
 
