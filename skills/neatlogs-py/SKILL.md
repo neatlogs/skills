@@ -342,6 +342,8 @@ completion.
 | `mask` | `callable` | `None` | Client-side mask function `(span_dict) -> span_dict` — see [Data Masking](#data-masking-and-pii) |
 | `isolate` | `Optional[bool]` | `None` | Route ALL neatlogs spans through a private tracer provider. `None` = auto-detect (isolates when a co-tenant LLM-observability tool like OpenLLMetry / Langfuse owns the global provider); `True`/`False` force the decision |
 | `tracer_provider` | `Optional[Any]` | `None` | A private `TracerProvider` you created but did NOT install as the OTel global — neatlogs emits every span into it and never claims the global meter/logger. For full isolation from a co-tenant OTel pipeline. Implies isolation |
+| `environment` | `Optional[str]` | `None` | Explicit deployment environment (or set `NEATLOGS_ENVIRONMENT`), stamped as `deployment.environment.name` on trace roots |
+| `release` | `Optional[str]` | `None` | Explicit deployment release / commit identifier (or set `NEATLOGS_RELEASE`), stamped as `neatlogs.provenance.release` on trace roots |
 
 ---
 
@@ -480,6 +482,25 @@ For deep dives, see the companion reference files:
 | Variable | Description |
 |---|---|
 | `NEATLOGS_API_KEY` | API key (alternative to `api_key` param) |
+| `NEATLOGS_ENVIRONMENT` | Deployment environment stamped on trace roots |
+| `NEATLOGS_RELEASE` | Deployment release / commit ID stamped on trace roots |
+
+---
+
+## Provenance, Checkpoints & Real-Trace Audit
+
+To make real workflow traces accurate for automated evaluation and step-by-step replay/backtracking:
+
+- **Root I/O & Sessions:** Ensure every `WORKFLOW` root records non-empty input and output (accumulating streamed output for SSE/generators), and bind a stable conversation `session_id` (never `trace_id` or a per-turn UUID).
+- **Replayable Tools & Retrievers:** Pass `replay=True` on deterministic JSON-serializable `@neatlogs.span(kind="TOOL" | "RETRIEVER" | "RERANKER" | "VECTOR_STORE" | "MEMORY" | "GUARDRAIL", replay=True)` functions, and include freshness timestamps (`updated_at`) on retrieved document dicts.
+- **Provenance & Checkpoints:** Pass `environment`/`release` on `init()`, `prompt_version`/`checkpoint_id` on `@neatlogs.span(...)` or `neatlogs.trace(...)`, and use fail-open `neatlogs.checkpoint(checkpoint_id, state=..., state_delta=...)` or `neatlogs.report_diagnostic(kind, message, ...)` on multi-step loops.
+- **Real-Trace Readiness Audit:** After exercising one real workflow, obtain explicit user approval to audit the captured trace through the installed SDK:
+
+```bash
+python -m neatlogs trace audit <trace_id> --expect-session --expect-retriever --json
+```
+
+(Or offline against a saved trace JSON via `python -m neatlogs trace audit --file trace.json --json`.)
 
 ---
 

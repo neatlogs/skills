@@ -39,6 +39,10 @@ For each candidate you found, answer two questions with evidence.
 - What feeds each LLM call — constructed messages, retrieved docs, tool results, raw user input?
 - Which function is the outermost orchestrator that everything nests under?
 - Where does control loop (agent → tool → agent again)?
+- **RAG, memory, & guardrails:** Are there vector-DB searches, SQL/BM25 retrievers, rerankers, memory stores, or policy guardrails — and do retrieved records carry freshness timestamps (`updated_at`, `timestamp`)?
+- **Sessions & end-users:** Where do conversation/thread IDs and end-user IDs live on incoming requests (so `session_id` is never set to `trace_id`)?
+- **Provenance:** Are prompt template versions (`prompt_version`) or deployment release/environment env vars (`NEATLOGS_ENVIRONMENT`, `NEATLOGS_RELEASE`) available?
+- **Async / streaming / background boundaries:** Do any handlers return `StreamingResponse` / generators or spawn background tasks where trace context or root output could drop?
 
 ## Anti-hallucination rules
 
