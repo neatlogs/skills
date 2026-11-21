@@ -89,13 +89,29 @@ For each function, answer in order:
        return StreamingResponse(event_gen())
 
    # ✅ RIGHT — span lives inside the generator, stays open across all yields → one trace
-   async def chat(...):
+   async def chat(req):
        async def traced_gen():
-           with neatlogs.trace("chat", kind="WORKFLOW"):
-               async for ev in event_gen():
+           chunks = []
+           with neatlogs.trace(
+               "chat",
+               kind="WORKFLOW",
+               session_id=req.conversation_id,
+               end_user_id=req.user_id,
+               prompt_version="chat-v2",
+           ) as span:
+               span.set_attribute("input.value", json.dumps({"message": req.message}))
+               async for ev in event_gen(req):
+                   chunks.append(ev.text)
                    yield ev
+               span.set_attribute("output.value", json.dumps({"reply": "".join(chunks)}))
        return StreamingResponse(traced_gen())
    ```
+
+## Clean Root I/O & Provenance Contract
+
+Automated evaluators and step-by-step replay read the `WORKFLOW` root span first:
+- **Non-empty root `input` and `output`:** Ensure the `WORKFLOW` entry point receives the user request and returns the final answer (or explicitly calls `span.set_attribute("input.value", ...)` / `span.set_attribute("output.value", ...)` for streaming handlers or functions that return `None`).
+- **Prompt & checkpoint provenance:** Pass `prompt_version="..."` on versioned `WORKFLOW` roots, and use `checkpoint_id="..."` (or `neatlogs.checkpoint(...)`) on multi-step loops so traces can be backtracked cleanly. See [`6b-retrievers-and-provenance.md`](6b-retrievers-and-provenance.md).
 
 2. **Does it contain a direct LLM API call?** (client.chat.completions.create, etc.)
    → YES → `@span(kind="CHAIN")` (see Step 5 for trace() wrapper)

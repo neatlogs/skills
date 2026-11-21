@@ -47,6 +47,7 @@ Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custo
 4. **Identify and decorate orchestration functions** → `references/4-decorate-functions.md`
 5. **Verify exactly one capture owner per LLM call** → `references/5-wrap-llm-calls.md`
 6. **Decorate tool functions** → `references/6-decorate-tools.md`
+6b. **Instrument retrievers, memory, guardrails, sessions & provenance** → `references/6b-retrievers-and-provenance.md`
 7. **Add flush/shutdown** → `references/7-flush-shutdown.md`
 
 ## Rules (apply to ALL steps)
@@ -57,6 +58,9 @@ Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custo
 - Never hardcode API keys in source. Use `os.getenv()`.
 - For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
 - `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`, `@tool`) — closest to `def`.
+- Ensure every `WORKFLOW` root captures clean, non-empty `input` (user request) and `output` (final reply — including accumulated output for streaming/SSE generators).
+- For multi-turn apps, wire a stable conversation/thread `session_id` via `identify()` or the `WORKFLOW` root — never pass `trace_id` or a per-turn UUID as `session_id`.
+- Never add synchronous network I/O or per-request `neatlogs.flush()` on server hot paths.
 - Minimal edits only. Add wrap()/handler/decorators + imports. Do not reformat, add comments, or refactor.
 
 ## Safety gate
@@ -156,8 +160,13 @@ After local Doctor passes and the requested instrumentation is in place:
 3. Exercise one representative real user workflow. End every opened span and
    use the documented flush/shutdown lifecycle for that process type.
 4. Through the target project's normal product trace view or supported public
-   read path, verify that exact run is finalized, has one meaningful root and
-   the expected semantic hierarchy, and contains no duplicate operation spans.
+   read path, verify that exact run is finalized, has one meaningful root with
+   clean non-empty input/output, has the expected semantic hierarchy (including
+   retrievers/tools and stable `session_id` when applicable), and contains no
+   duplicate operation spans. When the installed SDK supports it, you may also
+   obtain approval to run `python -m neatlogs trace audit <trace_id> --json`
+   (or `--file <trace.json> --json`) to check real-trace evaluation and replay
+   readiness.
 
 Keep project credentials in the process environment or client secret storage;
 never put them in commands, output, files, or agent context. Do not use a
@@ -170,6 +179,7 @@ rollback/manual recovery instructions without claiming completion.
 ## Reference (for decision-making during steps 4-6)
 
 - Build the component inventory BEFORE instrumenting → `references/understand-first.md`
+- Retrievers, memory, guardrails, checkpoints & provenance → `references/6b-retrievers-and-provenance.md`
 - Sessions & end-users (group multi-turn conversations, per-customer analytics) → `references/sessions-and-end-users.md`
 - Span kinds and when to use each → `references/span-kinds.md`
 - What the wrapper/handler/processor already covers → `references/auto-instrumented.md`

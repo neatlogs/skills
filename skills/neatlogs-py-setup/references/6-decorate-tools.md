@@ -45,13 +45,23 @@ A function is a TOOL if it:
 
 ```python
 # ✅ RIGHT — standalone tool function, NOT part of any framework
-@neatlogs.span(kind="TOOL", tool_name="read_document", description="Read document from disk")
+@neatlogs.span(
+    kind="TOOL",
+    tool_name="read_document",
+    description="Read document from disk",
+    replay=True,
+)
 def read_document(file_path: str) -> str:
     with open(file_path, 'r') as f:
         return f.read()
 
 # ✅ RIGHT — external API call, not covered by any instrumentor
-@neatlogs.span(kind="TOOL", tool_name="web_search", description="Search the web")
+@neatlogs.span(
+    kind="TOOL",
+    tool_name="web_search",
+    description="Search the web",
+    replay=True,
+)
 def web_search(query: str) -> list[str]:
     return search_api.search(query)
 
@@ -75,6 +85,10 @@ def calculate(expression: str) -> str:
 - Functions with < 3 lines of trivial logic
 - Internal helper functions only called by one parent
 - Config loaders, logger setup, validation-only functions
+
+## Enabling Step Backtracking with `replay=True`
+
+For standalone tools with JSON-serializable inputs and outputs, pass `replay=True` so recorded traces can be backtracked, replayed, or forked from any step without re-executing live side effects. For custom retrievers, rerankers, memory lookups, and guardrails, continue to [`6b-retrievers-and-provenance.md`](6b-retrievers-and-provenance.md).
 
 ## Verification
 
