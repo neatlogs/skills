@@ -86,16 +86,166 @@ For each function, answer in order:
    # ❌ WRONG — decorator closes when the StreamingResponse is returned, orphaning the stream
    @neatlogs.span(kind="WORKFLOW", name="chat")
    async def chat(...):
-       return StreamingResponse(event_gen())
+       return StreamingResponse(event_gen(), media_type="text/event-stream")
 
-   # ✅ RIGHT — span lives inside the generator, stays open across all yields → one trace
-   async def chat(...):
+   # ✅ RIGHT — instrument typed app events inside the generator before SSE wire encoding
+   import json
+   import re
+   from starlette.responses import StreamingResponse
+
+   MAX_PREVIEW_CHARS = 4096
+   MAX_SANITIZE_CHARS = MAX_PREVIEW_CHARS * 2  # sanitize bounded lookahead before clipping
+   _EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+   _BEARER_RE = re.compile(r"(?i)\b(?:authorization\s*:\s*)?bearer\s+\S+")
+   _API_KEY_RE = re.compile(
+       r"(?:(?<![A-Za-z0-9])(?:sk|pk|nl[a-z]{0,2})[-_][A-Za-z0-9_-]{12,}|(?i:\bx-api-key\s*:\s*\S+))"
+   )
+   _TRAILING_EMAIL_FRAG_RE = re.compile(r"(?:^|(?<=\s))\S*@\S*$")
+   _TRAILING_KEY_FRAG_RE = re.compile(r"(?:(?<![A-Za-z0-9])(?:sk|pk|nl[a-z]{0,2})[-_]\S*$)")
+
+
+   def _redact_pii(text: str) -> str:
+       # Substitute your app's PII/secret scrubber (or configure neatlogs.init(mask=...))
+       text = _BEARER_RE.sub("[REDACTED_TOKEN]", text)
+       text = _API_KEY_RE.sub("[REDACTED_SECRET]", text)
+       return _EMAIL_RE.sub("[REDACTED_EMAIL]", text)
+
+
+   def _sanitize_and_bound(text: str, *, already_truncated: bool = False) -> tuple[str, bool]:
+       exceeded = already_truncated or len(text) > MAX_SANITIZE_CHARS
+       window = text[:MAX_SANITIZE_CHARS]
+       if exceeded:
+           window = _TRAILING_EMAIL_FRAG_RE.sub("[REDACTED_EMAIL]", window)
+           window = _TRAILING_KEY_FRAG_RE.sub("[REDACTED_SECRET]", window)
+       sanitized = _redact_pii(window)
+       if len(sanitized) > MAX_PREVIEW_CHARS:
+           clipped = _TRAILING_EMAIL_FRAG_RE.sub("", sanitized[:MAX_PREVIEW_CHARS])
+           return clipped, True
+       return sanitized, exceeded
+
+
+   def _safe_str_attr(obj, name: str) -> str | None:
+       try:
+           val = getattr(obj, name, None)
+           return val if isinstance(val, str) and val else None
+       except Exception:
+           return None
+
+
+   def _project_request_input(req) -> tuple[dict[str, object], bool]:
+       # Approved, sanitized application-level projection — never raw request bodies
+       text = _safe_str_attr(req, "message") or ""
+       sanitized, truncated = _sanitize_and_bound(text)
+       projection: dict[str, object] = {"message": sanitized}
+       if truncated:
+           projection["truncated"] = True
+       return projection, truncated
+
+
+   def _format_sse(ev) -> str:
+       # Wire encoder stays separate from telemetry; replace with your app's SSE serializer
+       raw_kind = ev.get("kind", "message") if isinstance(ev, dict) else getattr(ev, "kind", "message")
+       kind = raw_kind.replace("\r", "").replace("\n", "") if isinstance(raw_kind, str) and raw_kind else "message"
+       payload = (
+           (ev.get("text", "") if isinstance(ev, dict) else getattr(ev, "text", ""))
+           if kind == "delta"
+           else {"kind": kind}
+       )
+       return f"event: {kind}\ndata: {json.dumps(payload)}\n\n"
+
+
+   async def chat(req):
+       # event_gen(req) yields typed app events (kind in {"delta", "done", "error", "debug"})
        async def traced_gen():
-           with neatlogs.trace("chat", kind="WORKFLOW"):
-               async for ev in event_gen():
-                   yield ev
-       return StreamingResponse(traced_gen())
+           preview_parts: list[str] = []
+           buffered_len = 0
+           completed = False
+           saw_done = False
+           saw_error = False
+           capture_failed = False
+           preview_truncated = False
+           input_truncated = False
+           with neatlogs.trace(
+               "chat",
+               kind="WORKFLOW",
+               session_id=_safe_str_attr(req, "conversation_id"),
+               end_user_id=_safe_str_attr(req, "user_id"),
+               # Requires neatlogs >= 1.5.0 (omit prompt_version on v1.4.x)
+               prompt_version="chat-v2",
+           ) as span:
+               try:
+                   input_projection, input_truncated = _project_request_input(req)
+                   span.set_attribute("input.value", json.dumps(input_projection))
+               except Exception:
+                   pass  # input projection / attribute errors must never disrupt the stream
+               try:
+                   async for ev in event_gen(req):
+                       try:
+                           kind = ev.get("kind") if isinstance(ev, dict) else getattr(ev, "kind", None)
+                           if isinstance(kind, str) and len(kind) <= 32:
+                               if kind == "error":
+                                   saw_error = True  # always tracked, even after preview_truncated
+                               elif kind == "done":
+                                   saw_done = True
+                               elif kind == "delta" and not preview_truncated and not saw_error:
+                                   text = ev.get("text") if isinstance(ev, dict) else getattr(ev, "text", None)
+                                   if isinstance(text, str) and text:
+                                       remaining = MAX_SANITIZE_CHARS - buffered_len
+                                       if len(text) > remaining:
+                                           preview_parts.append(text[:remaining])
+                                           buffered_len = MAX_SANITIZE_CHARS
+                                           preview_truncated = True
+                                       else:
+                                           preview_parts.append(text)
+                                           buffered_len += len(text)
+                       except Exception:
+                           capture_failed = True  # telemetry errors must never disrupt SSE delivery
+                       yield _format_sse(ev)  # leave yielded wire frames untouched
+                   completed = True
+               finally:
+                   preview = ""
+                   try:
+                       preview, preview_truncated = _sanitize_and_bound(
+                           "".join(preview_parts),
+                           already_truncated=preview_truncated,
+                       )
+                   except Exception:
+                       capture_failed = True
+                   has_answer = bool(preview.strip())
+                   stream_incomplete = (
+                       (not completed)
+                       or (not saw_done)
+                       or saw_error
+                       or capture_failed
+                       or (not has_answer)
+                   )
+                   capture_truncated = input_truncated or preview_truncated
+                   if not stream_incomplete and has_answer:
+                       try:
+                           output_payload: dict[str, object] = {"reply": preview}
+                           if preview_truncated:
+                               output_payload["truncated"] = True
+                           span.set_attribute("output.value", json.dumps(output_payload))
+                       except Exception:
+                           stream_incomplete = True
+                   try:
+                       span.set_attribute("neatlogs.capture.truncated", capture_truncated)
+                       span.set_attribute("neatlogs.stream.incomplete", stream_incomplete)
+                   except Exception:
+                       pass
+       return StreamingResponse(traced_gen(), media_type="text/event-stream")
    ```
+
+   Wrap the application event generator before SSE wire encoding so completion/error state is authoritative and never depends on parsing raw wire frames; use `StreamingResponse(..., media_type="text/event-stream")` for formatted `str`/`bytes` frames (or `EventSourceResponse` from `sse-starlette` if yielding dict frames).
+   - **Approved projections & pre-clip redaction:** Project only allowlisted application fields (`req.message`, `delta` text — ignoring `debug`/internal events and private `metadata`), and sanitize emails, bearer tokens, and API keys *before* clipping to `MAX_PREVIEW_CHARS` (re-bounding after redaction and slicing `text[:remaining]` so multi-megabyte chunks stay bounded).
+   - **Fail-open telemetry:** Guard identity lookups (`conversation_id`/`user_id`), input projection, event capture, sanitization, and `span.set_attribute(...)` in `try/except Exception` so telemetry errors never disrupt SSE delivery or alter yielded wire frames.
+   - **Authoritative completion & canonical Doctor flags:** Track `completed`, `saw_done`, `saw_error` (even after `preview_truncated`), and `capture_failed` independently of preview buffering; emit `neatlogs.capture.truncated` and `neatlogs.stream.incomplete`, and omit `output.value` unless a nonempty completed answer is known (never publish `{"reply": ""}` or a partial prefix after an error, cancellation, or capture failure).
+
+## Clean Root I/O & Provenance Contract
+
+Automated evaluators and step-by-step replay read the `WORKFLOW` root span first:
+- **Non-empty root `input` and `output`:** Ensure the `WORKFLOW` entry point receives the user request and returns the final answer (or explicitly calls `span.set_attribute("input.value", ...)` / `span.set_attribute("output.value", ...)` for streaming handlers or functions that return `None`).
+- **Prompt & checkpoint provenance (`neatlogs >= 1.5.0`):** Check installed SDK version first (`python -c "import neatlogs; print(neatlogs.__version__)"`). On `neatlogs >= 1.5.0`, pass `prompt_version="..."` on versioned `WORKFLOW` roots and use `checkpoint_id="..."` (or `neatlogs.checkpoint(...)`) on multi-step loops so traces can be backtracked cleanly (omit on `v1.4.x` to avoid `TypeError`/`AttributeError`). See [`6b-retrievers-and-provenance.md`](6b-retrievers-and-provenance.md).
 
 2. **Does it contain a direct LLM API call?** (client.chat.completions.create, etc.)
    → YES → `@span(kind="CHAIN")` (see Step 5 for trace() wrapper)

@@ -47,6 +47,7 @@ Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custo
 4. **Identify and decorate orchestration functions** → `references/4-decorate-functions.md`
 5. **Verify exactly one capture owner per LLM call** → `references/5-wrap-llm-calls.md`
 6. **Decorate tool functions** → `references/6-decorate-tools.md`
+6b. **Instrument retrievers, memory, guardrails, sessions & provenance** → `references/6b-retrievers-and-provenance.md`
 7. **Add flush/shutdown** → `references/7-flush-shutdown.md`
 
 ## Rules (apply to ALL steps)
@@ -55,8 +56,11 @@ Layer `@neatlogs.span` / `neatlogs.log` only on your own orchestration and custo
 - `neatlogs.init()` MUST execute BEFORE any LLM library imports and BEFORE the client/agent is constructed/wrapped.
 - If `load_dotenv()` exists, it MUST run BEFORE `neatlogs.init()`.
 - Never hardcode API keys in source. Use `os.getenv()`.
-- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()`; for other managed projects, omit `endpoint` and `NEATLOGS_ENDPOINT`.
+- For EU projects, set `endpoint="https://eu.ingest.neatlogs.com"` in `neatlogs.init()` — for standalone API-key (`NEATLOGS_API_KEY`) CLI commands (`neatlogs doctor --probe` / API-key `--trace`), pass `--endpoint https://eu.ingest.neatlogs.com` or set `NEATLOGS_ENDPOINT=https://eu.ingest.neatlogs.com`; for token-authenticated (`NEATLOGS_TOKEN` + `NEATLOGS_PROJECT_ID`) `doctor --trace` audits, unset `NEATLOGS_API_KEY` (`env -u NEATLOGS_API_KEY`) and set `NEATLOGS_HOST=https://eu.app.neatlogs.com` (the app origin — never point token-auth app-API audits at the ingest host). For other managed projects, omit `endpoint`, `NEATLOGS_ENDPOINT`, and `NEATLOGS_HOST`.
 - `@neatlogs.span()` goes BELOW framework decorators (`@retry`, `@app.route`, `@tool`) — closest to `def`.
+- Ensure every `WORKFLOW` root captures clean, non-empty `input` (user request) and `output` (final reply — including a bounded, sanitized preview or final answer for streaming/SSE generators without altering yielded chunks).
+- For multi-turn apps, wire a stable conversation/thread `session_id` via `identify()` or the `WORKFLOW` root — never pass `trace_id` or a per-turn UUID as `session_id`.
+- Never add synchronous network I/O or per-request `neatlogs.flush()` on server hot paths.
 - Minimal edits only. Add wrap()/handler/decorators + imports. Do not reformat, add comments, or refactor.
 
 ## Safety gate
@@ -156,8 +160,28 @@ After local Doctor passes and the requested instrumentation is in place:
 3. Exercise one representative real user workflow. End every opened span and
    use the documented flush/shutdown lifecycle for that process type.
 4. Through the target project's normal product trace view or supported public
-   read path, verify that exact run is finalized, has one meaningful root and
-   the expected semantic hierarchy, and contains no duplicate operation spans.
+   read path, verify that exact run is finalized, has one meaningful root (and
+   in the product trace view, clean non-empty input/output; note that the public
+   CLI span list returns metadata only), has the expected semantic hierarchy
+   (including retrievers/tools and stable `session_id` when applicable), and
+   contains no duplicate operation spans. When `neatlogs >= 1.5.0` is installed
+   (check `python -c "import neatlogs; print(neatlogs.__version__)"` first;
+   older `v1.4.x` exits 4), you may also obtain approval to run
+   `python -m neatlogs doctor --trace <trace_id> --json` (using
+   `NEATLOGS_API_KEY` for full payload checks, or `--file <trace.json> --json`
+   offline) to check real-trace evaluation and replay readiness. Because
+   `neatlogs doctor` runs as a separate CLI command, it defaults to US hosts
+   unless configured — for EU or custom-region projects, match the host setting
+   to the auth path: with `NEATLOGS_API_KEY`, pass
+   `--endpoint https://eu.ingest.neatlogs.com` (or your custom ingest endpoint)
+   or set a matching `NEATLOGS_ENDPOINT` (for example,
+   `python -m neatlogs doctor --trace <trace_id> --endpoint https://eu.ingest.neatlogs.com --json`);
+   with `NEATLOGS_TOKEN` + `NEATLOGS_PROJECT_ID` (metadata-only public API
+   spans), unset `NEATLOGS_API_KEY` (so Doctor does not prefer an exported SDK
+   key over token auth) and set `NEATLOGS_HOST=https://eu.app.neatlogs.com`
+   (the app origin — never point token-authenticated audits at
+   `eu.ingest.neatlogs.com` via `--endpoint` or `NEATLOGS_ENDPOINT`, for example
+   `env -u NEATLOGS_API_KEY NEATLOGS_HOST=https://eu.app.neatlogs.com python -m neatlogs doctor --trace <trace_id> --json`).
 
 Keep project credentials in the process environment or client secret storage;
 never put them in commands, output, files, or agent context. Do not use a
@@ -170,6 +194,7 @@ rollback/manual recovery instructions without claiming completion.
 ## Reference (for decision-making during steps 4-6)
 
 - Build the component inventory BEFORE instrumenting → `references/understand-first.md`
+- Retrievers, memory, guardrails, checkpoints & provenance → `references/6b-retrievers-and-provenance.md`
 - Sessions & end-users (group multi-turn conversations, per-customer analytics) → `references/sessions-and-end-users.md`
 - Span kinds and when to use each → `references/span-kinds.md`
 - What the wrapper/handler/processor already covers → `references/auto-instrumented.md`
